@@ -61,9 +61,18 @@ async function processOneCycle(page) {
 
   const processButton = page.locator('form[data-process-message] button[type="submit"]');
   if (await processButton.count()) {
-    await processButton.first().click();
+    const response = await page.request.post(
+      `${baseUrl}/admin/messages/${messageId}/process`
+    );
+
+    if (!response.ok()) {
+      throw new Error(
+        `failed to mark message ${messageId || '(unknown)'} as processed: ${response.status()}`
+      );
+    }
+
     await page.waitForTimeout(1000);
-    log(`marked message ${messageId || '(unknown)'} as processed`);
+    log(`marked message ${messageId || '(unknown)'} as processed without re-render`);
   }
 }
 
@@ -110,4 +119,3 @@ main().catch((error) => {
   console.error(`[worker] fatal error: ${error.stack || error.message}`);
   process.exit(1);
 });
-
