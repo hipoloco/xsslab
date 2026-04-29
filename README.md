@@ -125,6 +125,33 @@ Expected:
 - `public-app`, `internal-app`, `internal-proxy`, `db`, and `worker` running
 - no published host ports for `3000`, `3001`, or `5432`
 
+## Reset The Lab Database
+
+After a full lab run, you can restore the database to a clean baseline with:
+
+```bash
+./tools/reset-db.sh
+```
+
+This reset does the following:
+
+- removes all rows from `contact_messages`
+- removes all rows from `internal_users`
+- recreates the internal user `admin/admin123`
+- inserts a small set of benign example contact messages
+
+SQL source:
+
+```text
+db/reset_lab.sql
+```
+
+Expected result after reset:
+
+- the worker can log in again as `admin`
+- there are no old XSS payloads left in the database
+- the message list starts from a known baseline
+
 ## Infrastructure Validation
 
 ### Public entrypoint
