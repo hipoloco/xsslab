@@ -118,6 +118,14 @@ app.get('/login', redirectIfAuthenticated, (req, res) => {
   res.render('login', { error: null });
 });
 
+app.get('/', (req, res) => {
+  if (req.session.user) {
+    return res.redirect('/admin');
+  }
+
+  return res.render('login', { error: null });
+});
+
 app.post('/login', redirectIfAuthenticated, async (req, res, next) => {
   const { username = '', password = '' } = req.body;
 
