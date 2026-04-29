@@ -1,0 +1,15 @@
+{
+  "name": "xsslab-public-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Public gym landing page for the stored XSS lab",
+  "scripts": {
+    "start": "node src/app.js"
+  },
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^4.21.2",
+    "pg": "^8.13.3"
+  }
+}
+

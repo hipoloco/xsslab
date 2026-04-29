@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mensajes internos</title>
+    <style>
+      body {
+        margin: 0;
+        background: #f2f6fa;
+        color: #18212c;
+        font-family: "Segoe UI", sans-serif;
+      }
+      .shell {
+        width: min(1220px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 40px;
+      }
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 18px;
+      }
+      .meta {
+        color: #607286;
+      }
+      .actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      a {
+        color: inherit;
+      }
+      .button {
+        text-decoration: none;
+        display: inline-flex;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid #d6e1eb;
+        background: white;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 20px;
+        overflow: hidden;
+        box-shadow: 0 16px 38px rgba(24, 33, 44, 0.07);
+      }
+      th, td {
+        text-align: left;
+        padding: 14px 12px;
+        border-bottom: 1px solid #e5edf5;
+        vertical-align: top;
+      }
+      th {
+        font-size: 0.82rem;
+        color: #607286;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .preview {
+        max-width: 340px;
+        color: #445364;
+      }
+      @media (max-width: 860px) {
+        .topbar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        table {
+          display: block;
+          overflow-x: auto;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <div class="topbar">
+        <div>
+          <h1>Mensajes de contacto</h1>
+          <div class="meta">Esta vista es el objetivo del payload de exfiltración HTML.</div>
+        </div>
+        <div class="actions">
+          <a class="button" href="/admin">Volver al dashboard</a>
+          <a class="button" href="/admin/messages/next">Procesar siguiente</a>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Fecha</th>
+            <th>Nombre</th>
+            <th>Email</th>
+            <th>Teléfono</th>
+            <th>Mensaje</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (!messages.length) { %>
+            <tr>
+              <td colspan="7">No hay mensajes todavía.</td>
+            </tr>
+          <% } %>
+          <% messages.forEach((message) => { %>
+            <tr>
+              <td><a href="/admin/messages/<%= message.id %>"><%= message.id %></a></td>
+              <td><%= formatDate(message.created_at) %></td>
+              <td><%= message.full_name %></td>
+              <td><%= message.email %></td>
+              <td><%= message.phone || 'N/A' %></td>
+              <td class="preview"><%= message.message.length > 120 ? `${message.message.slice(0, 120)}...` : message.message %></td>
+              <td><%= message.status %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </main>
+  </body>
+</html>
+

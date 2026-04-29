@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalle de mensaje</title>
+    <style>
+      body {
+        margin: 0;
+        background: #eef3f8;
+        color: #19232f;
+        font-family: "Segoe UI", sans-serif;
+      }
+      .shell {
+        width: min(980px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 42px;
+      }
+      .panel {
+        background: white;
+        border-radius: 24px;
+        border: 1px solid #d9e3ee;
+        box-shadow: 0 18px 44px rgba(25, 35, 47, 0.08);
+        overflow: hidden;
+      }
+      .header {
+        padding: 22px 26px;
+        border-bottom: 1px solid #e6edf5;
+        background: linear-gradient(135deg, #ffffff 0%, #f4f8fd 100%);
+      }
+      .badge {
+        display: inline-flex;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: #e8eef9;
+        color: #34578c;
+        font-size: 0.78rem;
+      }
+      .content {
+        padding: 26px;
+      }
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        margin-bottom: 22px;
+      }
+      .meta-card {
+        padding: 14px;
+        border-radius: 16px;
+        background: #f7fafc;
+        border: 1px solid #e5edf5;
+      }
+      .meta-card strong {
+        display: block;
+        font-size: 0.82rem;
+        color: #5f7389;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .message-box {
+        border-radius: 18px;
+        padding: 18px;
+        min-height: 140px;
+        background: #fcfdff;
+        border: 1px solid #dfe8f1;
+      }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        margin-top: 22px;
+        flex-wrap: wrap;
+      }
+      .button, button {
+        display: inline-flex;
+        text-decoration: none;
+        font: inherit;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid #d4e0ec;
+        background: white;
+        color: #19232f;
+      }
+      button.primary {
+        border-color: #2e65a7;
+        background: #2e65a7;
+        color: white;
+        cursor: pointer;
+      }
+      .notice {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        background: #fff3e1;
+        color: #7d4e00;
+      }
+      @media (max-width: 700px) {
+        .meta {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body data-message-id="<%= message ? message.id : '' %>">
+    <main class="shell">
+      <section class="panel">
+        <header class="header">
+          <span class="badge"><%= sourceLabel %></span>
+          <h1><%= message ? `Mensaje #${message.id}` : 'Sin mensajes nuevos' %></h1>
+          <p>
+            Modo actual: <strong><%= settings.labMode %></strong> |
+            Cookie HttpOnly: <strong><%= settings.cookieHttpOnly %></strong> |
+            CSP: <strong><%= settings.enableCsp %></strong>
+          </p>
+        </header>
+
+        <div class="content">
+          <% if (!message) { %>
+            <p>No hay mensajes con estado <code>new</code> en este momento.</p>
+            <div class="toolbar">
+              <a class="button" href="/admin">Volver al dashboard</a>
+              <a class="button" href="/admin/messages">Ver todos los mensajes</a>
+            </div>
+          <% } else { %>
+            <div class="meta">
+              <div class="meta-card">
+                <strong>Remitente</strong>
+                <%= message.full_name %>
+              </div>
+              <div class="meta-card">
+                <strong>Email</strong>
+                <%= message.email %>
+              </div>
+              <div class="meta-card">
+                <strong>Teléfono</strong>
+                <%= message.phone || 'N/A' %>
+              </div>
+              <div class="meta-card">
+                <strong>Estado</strong>
+                <%= message.status %>
+              </div>
+            </div>
+
+            <div class="message-box">
+              <% if (settings.renderUnsafeHtml) { %>
+                <%# Intentionally unsafe in vulnerable mode for the stored XSS demo. %>
+                <%- message.message %>
+              <% } else { %>
+                <%= message.message %>
+              <% } %>
+            </div>
+
+            <div class="notice">
+              Esta vista representa el punto principal de ejecución del XSS cuando el worker navega como admin.
+            </div>
+
+            <div class="toolbar">
+              <a class="button" href="/admin">Volver al dashboard</a>
+              <a class="button" href="/admin/messages">Ver todos los mensajes</a>
+              <% if (message.status !== 'processed') { %>
+                <form action="/admin/messages/<%= message.id %>/process" method="post" data-process-message>
+                  <button class="primary" type="submit">Marcar como procesado</button>
+                </form>
+              <% } %>
+            </div>
+          <% } %>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
+

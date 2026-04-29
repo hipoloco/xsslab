@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CrossFit Atlas</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f3eee5;
+        --panel: rgba(255, 255, 255, 0.86);
+        --ink: #1b1b1b;
+        --muted: #64584a;
+        --accent: #cf4420;
+        --accent-dark: #8e2007;
+        --line: rgba(27, 27, 27, 0.12);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(207, 68, 32, 0.15), transparent 35%),
+          radial-gradient(circle at right, rgba(0, 0, 0, 0.08), transparent 20%),
+          linear-gradient(135deg, #f8f3ec 0%, #efe4d1 48%, #e3d8c6 100%);
+      }
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 32px 20px 60px;
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 28px;
+        align-items: stretch;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        box-shadow: 0 20px 60px rgba(56, 32, 12, 0.12);
+        backdrop-filter: blur(10px);
+      }
+      .headline {
+        padding: 40px;
+      }
+      .eyebrow {
+        display: inline-flex;
+        padding: 8px 12px;
+        border-radius: 999px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 0.72rem;
+        background: rgba(207, 68, 32, 0.12);
+        color: var(--accent-dark);
+      }
+      h1 {
+        font-size: clamp(2.6rem, 5vw, 4.9rem);
+        line-height: 0.92;
+        margin: 18px 0 18px;
+        text-transform: uppercase;
+      }
+      p {
+        line-height: 1.6;
+        color: var(--muted);
+      }
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 24px;
+      }
+      .stat {
+        padding: 18px;
+        border-radius: 18px;
+        background: rgba(27, 27, 27, 0.04);
+      }
+      .stat strong {
+        display: block;
+        font-size: 1.4rem;
+        margin-bottom: 6px;
+        color: var(--ink);
+      }
+      .features {
+        margin-top: 28px;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 18px;
+      }
+      .feature {
+        padding: 22px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(27, 27, 27, 0.08);
+      }
+      .feature h2 {
+        margin: 0 0 10px;
+        font-size: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .form-card {
+        padding: 28px;
+        position: relative;
+        overflow: hidden;
+      }
+      .form-card::after {
+        content: "";
+        position: absolute;
+        inset: auto -40px -70px auto;
+        width: 180px;
+        height: 180px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(207, 68, 32, 0.32), transparent 70%);
+      }
+      form {
+        display: grid;
+        gap: 14px;
+        position: relative;
+        z-index: 1;
+      }
+      label {
+        display: grid;
+        gap: 8px;
+        font-size: 0.92rem;
+        color: var(--muted);
+      }
+      input, textarea, button {
+        width: 100%;
+        border-radius: 16px;
+        border: 1px solid rgba(27, 27, 27, 0.14);
+        padding: 14px 16px;
+        font: inherit;
+      }
+      input, textarea {
+        background: rgba(255, 255, 255, 0.95);
+      }
+      textarea {
+        min-height: 130px;
+        resize: vertical;
+      }
+      button {
+        cursor: pointer;
+        border: 0;
+        background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+        color: white;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .error {
+        border-radius: 14px;
+        padding: 12px 14px;
+        background: rgba(143, 16, 16, 0.08);
+        color: #7a1717;
+      }
+      @media (max-width: 900px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+        .stats,
+        .features {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <article class="card headline">
+          <span class="eyebrow">CrossFit Atlas</span>
+          <h1>Fuerza real. Técnica limpia. Comunidad fuerte.</h1>
+          <p>
+            Entrenamiento funcional guiado por coaches certificados, grupos reducidos y una
+            cultura de progreso medible. Atlas combina intensidad, movilidad y seguimiento
+            personalizado para atletas nuevos y avanzados.
+          </p>
+
+          <div class="stats">
+            <div class="stat">
+              <strong>06:00</strong>
+              Primer turno del día
+            </div>
+            <div class="stat">
+              <strong>12</strong>
+              Personas por clase
+            </div>
+            <div class="stat">
+              <strong>7 días</strong>
+              De programación semanal
+            </div>
+          </div>
+
+          <div class="features">
+            <div class="feature">
+              <h2>On Ramp</h2>
+              <p>Programa inicial de 4 sesiones para técnica, movilidad y adaptación progresiva.</p>
+            </div>
+            <div class="feature">
+              <h2>Open Gym</h2>
+              <p>Franjas libres para practicar levantamientos, accesorios y skill work.</p>
+            </div>
+            <div class="feature">
+              <h2>Recovery</h2>
+              <p>Bloques guiados de respiración, descarga y movilidad para sostener la carga semanal.</p>
+            </div>
+          </div>
+        </article>
+
+        <aside class="card form-card">
+          <h2>Solicita información</h2>
+          <p>Déjanos tus datos y te contactamos con planes, horarios y clase de prueba.</p>
+
+          <% if (error) { %>
+            <div class="error"><%= error %></div>
+          <% } %>
+
+          <form action="/contact" method="post">
+            <label>
+              Nombre completo
+              <input type="text" name="full_name" value="<%= form.full_name %>" required>
+            </label>
+            <label>
+              Email
+              <input type="email" name="email" value="<%= form.email %>" required>
+            </label>
+            <label>
+              Teléfono
+              <input type="text" name="phone" value="<%= form.phone %>">
+            </label>
+            <label>
+              Mensaje
+              <textarea name="message" required><%= form.message %></textarea>
+            </label>
+            <button type="submit">Enviar consulta</button>
+          </form>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>
+

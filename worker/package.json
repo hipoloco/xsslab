@@ -1,0 +1,12 @@
+{
+  "name": "xsslab-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright worker for the stored XSS lab",
+  "scripts": {
+    "start": "node src/worker.js"
+  },
+  "dependencies": {
+    "playwright": "1.59.1"
+  }
+}

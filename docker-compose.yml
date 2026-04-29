@@ -1,0 +1,116 @@
+services:
+  public-proxy:
+    image: nginx:1.27-alpine
+    container_name: xsslab-public-proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/public.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      public-app:
+        condition: service_healthy
+    networks:
+      - lab_net
+
+  internal-proxy:
+    image: nginx:1.27-alpine
+    container_name: xsslab-internal-proxy
+    volumes:
+      - ./nginx/internal.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      internal-app:
+        condition: service_healthy
+    networks:
+      lab_net:
+        aliases:
+          - backend.cross.fit
+
+  public-app:
+    build: ./public-app
+    container_name: xsslab-public-app
+    environment:
+      DATABASE_URL: postgres://gym:gym_pass@db:5432/gym_lab
+      PUBLIC_PORT: 3000
+    expose:
+      - "3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - lab_net
+
+  internal-app:
+    build: ./internal-app
+    container_name: xsslab-internal-app
+    environment:
+      DATABASE_URL: postgres://gym:gym_pass@db:5432/gym_lab
+      INTERNAL_PORT: 3001
+      SESSION_SECRET: lab_secret
+      LAB_MODE: ${LAB_MODE:-vulnerable}
+      COOKIE_HTTPONLY: ${COOKIE_HTTPONLY:-}
+      ENABLE_CSP: ${ENABLE_CSP:-}
+      RENDER_UNSAFE_HTML: ${RENDER_UNSAFE_HTML:-}
+    expose:
+      - "3001"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/health >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - lab_net
+
+  worker:
+    build: ./worker
+    container_name: xsslab-worker
+    environment:
+      INTERNAL_BASE_URL: http://backend.cross.fit
+      ADMIN_USER: admin
+      ADMIN_PASS: admin123
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-20}
+    depends_on:
+      internal-proxy:
+        condition: service_started
+      internal-app:
+        condition: service_healthy
+    networks:
+      - lab_net
+
+  db:
+    image: postgres:16
+    container_name: xsslab-db
+    environment:
+      POSTGRES_DB: gym_lab
+      POSTGRES_USER: gym
+      POSTGRES_PASSWORD: gym_pass
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gym -d gym_lab"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - lab_net
+
+volumes:
+  db_data:
+
+networks:
+  lab_net:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+

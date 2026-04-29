@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard interno</title>
+    <style>
+      :root {
+        --bg: #f4f7fb;
+        --ink: #1b2430;
+        --muted: #657387;
+        --line: #d8e0ea;
+        --panel: #ffffff;
+        --accent: #275ea3;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: "Segoe UI", sans-serif;
+      }
+      header, main {
+        width: min(1120px, calc(100vw - 32px));
+        margin: 0 auto;
+      }
+      header {
+        padding: 28px 0 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 16px;
+      }
+      .meta {
+        color: var(--muted);
+      }
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      a, button {
+        font: inherit;
+      }
+      a.button, button {
+        text-decoration: none;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--line);
+        background: white;
+        color: var(--ink);
+      }
+      .primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 16px;
+      }
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 12px 28px rgba(27, 36, 48, 0.05);
+      }
+      .card h2 {
+        margin: 0 0 8px;
+        font-size: 0.95rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .card strong {
+        font-size: 2rem;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .table-card {
+        margin-top: 18px;
+      }
+      th, td {
+        text-align: left;
+        padding: 14px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        font-size: 0.82rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      @media (max-width: 900px) {
+        .grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      @media (max-width: 600px) {
+        header {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .toolbar {
+          flex-wrap: wrap;
+        }
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Dashboard</h1>
+        <div class="meta">
+          Usuario: <strong><%= currentUser.username %></strong> |
+          Modo: <strong><%= settings.labMode %></strong> |
+          Cookie HttpOnly: <strong><%= settings.cookieHttpOnly %></strong> |
+          CSP: <strong><%= settings.enableCsp %></strong>
+        </div>
+      </div>
+      <div class="toolbar">
+        <a class="button primary" href="/admin/messages/next">Procesar siguiente</a>
+        <a class="button" href="/admin/messages">Ver mensajes</a>
+        <form action="/logout" method="post">
+          <button type="submit">Cerrar sesión</button>
+        </form>
+      </div>
+    </header>
+
+    <main>
+      <section class="grid">
+        <article class="card">
+          <h2>Nuevos</h2>
+          <strong><%= counts.new %></strong>
+        </article>
+        <article class="card">
+          <h2>Procesando</h2>
+          <strong><%= counts.processing %></strong>
+        </article>
+        <article class="card">
+          <h2>Procesados</h2>
+          <strong><%= counts.processed %></strong>
+        </article>
+        <article class="card">
+          <h2>Marcados</h2>
+          <strong><%= counts.flagged %></strong>
+        </article>
+      </section>
+
+      <section class="card table-card">
+        <h2>Últimos mensajes</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Fecha</th>
+              <th>Nombre</th>
+              <th>Email</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% if (!recentMessages.length) { %>
+              <tr>
+                <td colspan="5">No hay mensajes registrados todavía.</td>
+              </tr>
+            <% } %>
+            <% recentMessages.forEach((message) => { %>
+              <tr>
+                <td><a href="/admin/messages/<%= message.id %>"><%= message.id %></a></td>
+                <td><%= formatDate(message.created_at) %></td>
+                <td><%= message.full_name %></td>
+                <td><%= message.email %></td>
+                <td><%= message.status %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </body>
+</html>
+
