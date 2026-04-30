@@ -297,20 +297,14 @@ That payload is also too large for the current public form because the `message`
 
 In practice, this step should be executed through an external JavaScript file loaded by a short stored XSS.
 
-Why this now returns the login page:
+What each part of the payload does:
 
-- the privileged worker reaches admin routes by explicitly attaching the JWT as a query parameter
-- that token is not sent automatically by a plain `fetch('/')`
-- because no auth is attached here, the backend responds with its unauthenticated front page
-
-Why the rest of the parameters make sense:
-
-- `fetch('/')` targets the current origin, so the request is made to `backend.cross.fit`
-- `r.text()` is used because the target is raw HTML
-- `btoa(unescape(encodeURIComponent(html)))` safely Base64-encodes the returned HTML
-- `method: 'POST'` keeps the Base64 in the request body instead of the URL
-- `mode: 'no-cors'` is enough because the attacker only needs the browser to send the request
-- `Content-Type: 'text/plain'` keeps the body easy to inspect by hand
+- `fetch('/')` requests the front page of the current origin
+- `r.text()` reads the response as HTML
+- `btoa(unescape(encodeURIComponent(html)))` converts that HTML to Base64
+- `method: 'POST'` sends the Base64 in the request body
+- `mode: 'no-cors'` is enough because the payload only needs to send the request
+- `Content-Type: 'text/plain'` keeps the captured body easy to inspect by hand
 
 ## Step 14.1: load the front page exfiltration from an external JavaScript file
 
