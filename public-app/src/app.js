@@ -24,6 +24,8 @@ app.get('/', (req, res) => {
 
 app.post('/contact', async (req, res, next) => {
   const { full_name = '', email = '', phone = '', message = '' } = req.body;
+  const trimmedPhone = phone.trim();
+  const phoneIsValid = !trimmedPhone || /^\d+$/.test(trimmedPhone);
   const form = {
     full_name,
     email,
@@ -38,11 +40,25 @@ app.post('/contact', async (req, res, next) => {
     });
   }
 
+  if (!phoneIsValid) {
+    return res.status(400).render('index', {
+      error: 'El teléfono solo puede contener números.',
+      form
+    });
+  }
+
+  if (message.length > 250) {
+    return res.status(400).render('index', {
+      error: 'El mensaje no puede superar los 250 caracteres.',
+      form
+    });
+  }
+
   try {
     await db.query(
       `INSERT INTO contact_messages (full_name, email, phone, message)
        VALUES ($1, $2, $3, $4)`,
-      [full_name.trim(), email.trim(), phone.trim(), message]
+      [full_name.trim(), email.trim(), trimmedPhone, message]
     );
 
     return res.status(201).render('thanks', {
@@ -74,4 +90,3 @@ app.use((error, req, res, next) => {
 app.listen(port, () => {
   console.log(`[public-app] listening on ${port}`);
 });
-

@@ -230,11 +230,18 @@
             </label>
             <label>
               Teléfono
-              <input type="text" name="phone" value="<%= form.phone %>">
+              <input
+                type="text"
+                name="phone"
+                value="<%= form.phone %>"
+                inputmode="numeric"
+                pattern="[0-9]+"
+                title="Ingresa solo números"
+              >
             </label>
             <label>
               Mensaje
-              <textarea name="message" required><%= form.message %></textarea>
+              <textarea name="message" maxlength="250" required><%= form.message %></textarea>
             </label>
             <button type="submit">Enviar consulta</button>
           </form>
