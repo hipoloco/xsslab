@@ -110,7 +110,7 @@
           <h1><%= message ? `Mensaje #${message.id}` : 'Sin mensajes nuevos' %></h1>
           <p>
             Modo actual: <strong><%= settings.labMode %></strong> |
-            Cookie HttpOnly: <strong><%= settings.cookieHttpOnly %></strong> |
+            Auth: <strong>JWT explícito</strong> |
             CSP: <strong><%= settings.enableCsp %></strong>
           </p>
         </header>
@@ -119,8 +119,8 @@
           <% if (!message) { %>
             <p>No hay mensajes con estado <code>new</code> en este momento.</p>
             <div class="toolbar">
-              <a class="button" href="/admin">Volver al dashboard</a>
-              <a class="button" href="/admin/messages">Ver todos los mensajes</a>
+              <a class="button" href="<%= authPath('/admin') %>">Volver al dashboard</a>
+              <a class="button" href="<%= authPath('/admin/messages') %>">Ver todos los mensajes</a>
             </div>
           <% } else { %>
             <div class="meta">
@@ -156,10 +156,10 @@
             </div>
 
             <div class="toolbar">
-              <a class="button" href="/admin">Volver al dashboard</a>
-              <a class="button" href="/admin/messages">Ver todos los mensajes</a>
+              <a class="button" href="<%= authPath('/admin') %>">Volver al dashboard</a>
+              <a class="button" href="<%= authPath('/admin/messages') %>">Ver todos los mensajes</a>
               <% if (message.status !== 'processed') { %>
-                <form action="/admin/messages/<%= message.id %>/process" method="post" data-process-message>
+                <form action="<%= authPath(`/admin/messages/${message.id}/process`) %>" method="post" data-process-message>
                   <button class="primary" type="submit">Marcar como procesado</button>
                 </form>
               <% } %>
@@ -170,4 +170,3 @@
     </main>
   </body>
 </html>
-

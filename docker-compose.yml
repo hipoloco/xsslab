@@ -51,9 +51,9 @@ services:
     environment:
       DATABASE_URL: postgres://gym:gym_pass@db:5432/gym_lab
       INTERNAL_PORT: 3001
-      SESSION_SECRET: lab_secret
+      JWT_SECRET: ${JWT_SECRET:-lab_secret}
+      AUTH_TOKEN_TTL: ${AUTH_TOKEN_TTL:-}
       LAB_MODE: ${LAB_MODE:-vulnerable}
-      COOKIE_HTTPONLY: ${COOKIE_HTTPONLY:-}
       ENABLE_CSP: ${ENABLE_CSP:-}
       RENDER_UNSAFE_HTML: ${RENDER_UNSAFE_HTML:-}
     expose:
@@ -113,4 +113,3 @@ networks:
     ipam:
       config:
         - subnet: 172.28.0.0/16
-

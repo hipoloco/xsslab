@@ -4,6 +4,7 @@ const baseUrl = process.env.INTERNAL_BASE_URL || 'http://backend.cross.fit';
 const username = process.env.ADMIN_USER || 'admin';
 const password = process.env.ADMIN_PASS || 'admin123';
 const intervalMs = Number(process.env.POLL_INTERVAL_SECONDS || 20) * 1000;
+const defaultStorageKey = 'gym_internal_token';
 
 function log(message) {
   console.log(`[worker] ${new Date().toISOString()} ${message}`);
@@ -13,26 +14,56 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function withToken(pathname, token) {
+  const separator = pathname.includes('?') ? '&' : '?';
+  return `${pathname}${separator}token=${encodeURIComponent(token)}`;
+}
+
 async function login(page) {
-  log(`opening login page at ${baseUrl}/login`);
+  log(`requesting JWT for ${username} from ${baseUrl}/api/login`);
+
+  const response = await page.request.post(`${baseUrl}/api/login`, {
+    form: {
+      username,
+      password
+    }
+  });
+
+  if (!response.ok()) {
+    throw new Error(`login failed with status ${response.status()}`);
+  }
+
+  const payload = await response.json();
+  const token = payload.token;
+  const tokenStorageKey = payload.tokenStorageKey || defaultStorageKey;
+
+  if (!token) {
+    throw new Error('login response did not include a token');
+  }
+
   await page.goto(`${baseUrl}/login`, {
     waitUntil: 'domcontentloaded',
     timeout: 30000
   });
-  await page.fill('input[name="username"]', username);
-  await page.fill('input[name="password"]', password);
-  await Promise.all([
-    page.waitForURL(/\/admin$/, { timeout: 30000 }),
-    page.click('button[type="submit"]')
-  ]);
-  log(`authenticated as ${username}`);
+
+  await page.evaluate(
+    ({ storageKey, issuedToken }) => {
+      localStorage.setItem(storageKey, issuedToken);
+    },
+    {
+      storageKey: tokenStorageKey,
+      issuedToken: token
+    }
+  );
+
+  log(`authenticated as ${username} with JWT`);
+  return token;
 }
 
 async function bootstrapLogin(page) {
   while (true) {
     try {
-      await login(page);
-      return;
+      return await login(page);
     } catch (error) {
       log(`login failed: ${error.message}`);
       await sleep(5000);
@@ -40,14 +71,14 @@ async function bootstrapLogin(page) {
   }
 }
 
-async function processOneCycle(page) {
-  await page.goto(`${baseUrl}/admin/messages/next`, {
+async function processOneCycle(page, token) {
+  await page.goto(`${baseUrl}${withToken('/admin/messages/next', token)}`, {
     waitUntil: 'domcontentloaded',
     timeout: 30000
   });
 
   if (page.url().includes('/login')) {
-    throw new Error('session expired, redirected to login');
+    throw new Error('token expired or invalid, redirected to login');
   }
 
   await page.waitForTimeout(3000);
@@ -62,7 +93,7 @@ async function processOneCycle(page) {
   const processButton = page.locator('form[data-process-message] button[type="submit"]');
   if (await processButton.count()) {
     const response = await page.request.post(
-      `${baseUrl}/admin/messages/${messageId}/process`
+      `${baseUrl}${withToken(`/admin/messages/${messageId}/process`, token)}`
     );
 
     if (!response.ok()) {
@@ -101,16 +132,16 @@ async function main() {
     log(`[request failed] ${request.url()} -> ${request.failure()?.errorText || 'unknown error'}`);
   });
 
-  await bootstrapLogin(page);
+  let authToken = await bootstrapLogin(page);
 
   while (true) {
     try {
-      await processOneCycle(page);
+      await processOneCycle(page, authToken);
       await sleep(intervalMs);
     } catch (error) {
       log(`cycle failed: ${error.message}`);
       await sleep(5000);
-      await bootstrapLogin(page);
+      authToken = await bootstrapLogin(page);
     }
   }
 }

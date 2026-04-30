@@ -28,7 +28,7 @@
 
 **Decision:**
 - Introduce `LAB_MODE=vulnerable|mitigated` as the primary switch.
-- Allow explicit overrides for `COOKIE_HTTPONLY`, `ENABLE_CSP`, and `RENDER_UNSAFE_HTML` if a lesson needs partial controls.
+- Allow explicit overrides for `JWT_SECRET`, `AUTH_TOKEN_TTL`, `ENABLE_CSP`, and `RENDER_UNSAFE_HTML` if a lesson needs partial controls.
 
 **Alternatives Considered:**
 - Keep separate vulnerable and fixed branches -> Rejected: adds coordination overhead during live demos.
@@ -39,3 +39,22 @@
 - ✅ Individual defenses can still be demonstrated separately.
 - ❌ Internal app logic becomes slightly more complex than the pure pseudocode in the plan.
 
+### ADR-003: Use explicit JWT auth in the internal backend to support the discovery flow (2026-04-29)
+
+**Context:**
+- The walkthrough needs to prove three separate moments: stored XSS execution, theft of a reusable credential, and explicit replay of that credential against `/admin` and `/admin/messages`.
+- Session cookies were sent automatically on same-origin `fetch('/')`, which collapsed the discovery flow by taking the XSS straight to `/admin`.
+
+**Decision:**
+- Replace `express-session` with JWT-based auth accepted via `Authorization: Bearer ...` or `?token=...`.
+- Store the JWT in browser `localStorage` for the privileged worker so the XSS can steal it during the vulnerable phase.
+- Make the worker browse protected views with an explicit token in the URL instead of automatic browser auth.
+
+**Alternatives Considered:**
+- Keep session cookies and document the existing behavior -> Rejected: did not match the intended classroom sequence.
+- Inject auth headers globally from Playwright -> Rejected: a plain `fetch('/')` from the XSS would also inherit auth automatically.
+
+**Consequences:**
+- ✅ The lab now supports the intended progression: login page, token theft, explicit replay to `/admin`, then `/admin/messages`.
+- ✅ A plain same-origin `fetch('/')` no longer authenticates implicitly.
+- ❌ The internal panel is slightly less realistic than a traditional cookie-backed web app.

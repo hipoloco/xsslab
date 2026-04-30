@@ -31,4 +31,6 @@ Only non-sensitive operational facts belong here.
 - Default lab mode: `vulnerable`
 - Runtime overrides live in `.env`
 - Admin credentials are documented in the README and seeded through `db/init.sql`
+- Internal auth model: explicit JWT
+- Browser storage key used by the worker: `gym_internal_token`
 - Same-host validation can reach the host collector from Docker via `172.28.0.1:9000`

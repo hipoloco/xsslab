@@ -86,8 +86,8 @@
           <div class="meta">Esta vista es el objetivo del payload de exfiltración HTML.</div>
         </div>
         <div class="actions">
-          <a class="button" href="/admin">Volver al dashboard</a>
-          <a class="button" href="/admin/messages/next">Procesar siguiente</a>
+          <a class="button" href="<%= authPath('/admin') %>">Volver al dashboard</a>
+          <a class="button" href="<%= authPath('/admin/messages/next') %>">Procesar siguiente</a>
         </div>
       </div>
 
@@ -111,7 +111,7 @@
           <% } %>
           <% messages.forEach((message) => { %>
             <tr>
-              <td><a href="/admin/messages/<%= message.id %>"><%= message.id %></a></td>
+              <td><a href="<%= authPath(`/admin/messages/${message.id}`) %>"><%= message.id %></a></td>
               <td><%= formatDate(message.created_at) %></td>
               <td><%= message.full_name %></td>
               <td><%= message.email %></td>
@@ -125,4 +125,3 @@
     </main>
   </body>
 </html>
-

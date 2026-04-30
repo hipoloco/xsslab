@@ -121,14 +121,14 @@
         <div class="meta">
           Usuario: <strong><%= currentUser.username %></strong> |
           Modo: <strong><%= settings.labMode %></strong> |
-          Cookie HttpOnly: <strong><%= settings.cookieHttpOnly %></strong> |
+          Auth: <strong>JWT explícito</strong> |
           CSP: <strong><%= settings.enableCsp %></strong>
         </div>
       </div>
       <div class="toolbar">
-        <a class="button primary" href="/admin/messages/next">Procesar siguiente</a>
-        <a class="button" href="/admin/messages">Ver mensajes</a>
-        <form action="/logout" method="post">
+        <a class="button primary" href="<%= authPath('/admin/messages/next') %>">Procesar siguiente</a>
+        <a class="button" href="<%= authPath('/admin/messages') %>">Ver mensajes</a>
+        <form action="<%= authPath('/logout') %>" method="post">
           <button type="submit">Cerrar sesión</button>
         </form>
       </div>
@@ -174,7 +174,7 @@
             <% } %>
             <% recentMessages.forEach((message) => { %>
               <tr>
-                <td><a href="/admin/messages/<%= message.id %>"><%= message.id %></a></td>
+                <td><a href="<%= authPath(`/admin/messages/${message.id}`) %>"><%= message.id %></a></td>
                 <td><%= formatDate(message.created_at) %></td>
                 <td><%= message.full_name %></td>
                 <td><%= message.email %></td>
@@ -187,4 +187,3 @@
     </main>
   </body>
 </html>
-

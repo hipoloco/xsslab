@@ -1,8 +1,14 @@
 const path = require('path');
 const express = require('express');
-const session = require('express-session');
 const db = require('./db');
-const { requireAuth, redirectIfAuthenticated } = require('./auth');
+const {
+  TOKEN_STORAGE_KEY,
+  appendToken,
+  createAuthStateMiddleware,
+  issueToken,
+  requireAuth,
+  redirectIfAuthenticated
+} = require('./auth');
 
 function parseBoolean(value, fallback) {
   if (value === undefined || value === null || value === '') {
@@ -24,13 +30,12 @@ function formatDate(value) {
 
 function buildSettings() {
   const labMode = process.env.LAB_MODE === 'mitigated' ? 'mitigated' : 'vulnerable';
-  const vulnerableDefaults = labMode === 'vulnerable';
 
   return {
     labMode,
-    renderUnsafeHtml: parseBoolean(process.env.RENDER_UNSAFE_HTML, vulnerableDefaults),
-    cookieHttpOnly: parseBoolean(process.env.COOKIE_HTTPONLY, !vulnerableDefaults),
-    enableCsp: parseBoolean(process.env.ENABLE_CSP, !vulnerableDefaults)
+    renderUnsafeHtml: parseBoolean(process.env.RENDER_UNSAFE_HTML, labMode === 'vulnerable'),
+    enableCsp: parseBoolean(process.env.ENABLE_CSP, labMode !== 'vulnerable'),
+    tokenStorageKey: TOKEN_STORAGE_KEY
   };
 }
 
@@ -46,11 +51,16 @@ function parseMessageId(rawValue) {
 const app = express();
 const port = Number(process.env.INTERNAL_PORT || 3001);
 const settings = buildSettings();
+const authOptions = {
+  secret: process.env.JWT_SECRET || process.env.SESSION_SECRET || 'lab_secret',
+  expiresIn: process.env.AUTH_TOKEN_TTL || '8h'
+};
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
 app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
 
 if (settings.enableCsp) {
   app.use((req, res, next) => {
@@ -62,20 +72,8 @@ if (settings.enableCsp) {
   });
 }
 
-app.use(session({
-  name: 'gym_internal_session',
-  secret: process.env.SESSION_SECRET || 'lab_secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: settings.cookieHttpOnly,
-    sameSite: 'lax',
-    secure: false
-  }
-}));
-
+app.use(createAuthStateMiddleware(authOptions));
 app.use((req, res, next) => {
-  res.locals.currentUser = req.session.user || null;
   res.locals.settings = settings;
   res.locals.formatDate = formatDate;
   next();
@@ -119,40 +117,61 @@ app.get('/login', redirectIfAuthenticated, (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  if (req.session.user) {
-    return res.redirect('/admin');
+  if (req.authUser) {
+    return res.redirect(res.locals.authPath('/admin'));
   }
 
   return res.render('login', { error: null });
 });
 
-app.post('/login', redirectIfAuthenticated, async (req, res, next) => {
+async function authenticateRequest(req, res, next, { apiMode }) {
   const { username = '', password = '' } = req.body;
 
   try {
     const user = await findUser(username.trim(), password);
     if (!user) {
+      if (apiMode) {
+        return res.status(401).json({
+          error: 'Credenciales inválidas.'
+        });
+      }
+
       return res.status(401).render('login', {
         error: 'Credenciales inválidas.'
       });
     }
 
-    req.session.user = user;
-    return res.redirect('/admin');
+    const token = issueToken(user, authOptions);
+
+    if (apiMode) {
+      return res.json({
+        token,
+        tokenStorageKey: TOKEN_STORAGE_KEY,
+        redirectUrl: appendToken('/admin', token),
+        user
+      });
+    }
+
+    return res.render('login-token', {
+      issuedToken: token,
+      adminUrl: appendToken('/admin', token),
+      user
+    });
   } catch (error) {
     return next(error);
   }
+}
+
+app.post('/api/login', redirectIfAuthenticated, (req, res, next) => {
+  authenticateRequest(req, res, next, { apiMode: true });
 });
 
-app.post('/logout', requireAuth, (req, res, next) => {
-  req.session.destroy((error) => {
-    if (error) {
-      return next(error);
-    }
+app.post('/login', redirectIfAuthenticated, (req, res, next) => {
+  authenticateRequest(req, res, next, { apiMode: false });
+});
 
-    res.clearCookie('gym_internal_session');
-    return res.redirect('/login');
-  });
+app.post('/logout', requireAuth, (req, res) => {
+  res.redirect('/login');
 });
 
 app.get('/admin', requireAuth, async (req, res, next) => {
@@ -269,7 +288,7 @@ app.post('/admin/messages/:id/process', requireAuth, async (req, res, next) => {
       return res.status(404).send('Mensaje no encontrado');
     }
 
-    return res.redirect(`/admin/messages/${messageId}`);
+    return res.redirect(res.locals.authPath(`/admin/messages/${messageId}`));
   } catch (error) {
     return next(error);
   }
@@ -299,6 +318,6 @@ app.use((error, req, res, next) => {
 
 app.listen(port, () => {
   console.log(
-    `[internal-app] listening on ${port} (mode=${settings.labMode}, httpOnly=${settings.cookieHttpOnly}, csp=${settings.enableCsp}, rawHtml=${settings.renderUnsafeHtml})`
+    `[internal-app] listening on ${port} (mode=${settings.labMode}, auth=jwt-explicit, csp=${settings.enableCsp}, rawHtml=${settings.renderUnsafeHtml})`
   );
 });
