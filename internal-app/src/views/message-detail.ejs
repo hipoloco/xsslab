@@ -119,8 +119,8 @@
           <% if (!message) { %>
             <p>No hay mensajes con estado <code>new</code> en este momento.</p>
             <div class="toolbar">
-              <a class="button" href="<%= authPath('/admin') %>">Volver al dashboard</a>
-              <a class="button" href="<%= authPath('/admin/messages') %>">Ver todos los mensajes</a>
+              <a class="button" href="/admin" data-auth-path="/admin">Volver al dashboard</a>
+              <a class="button" href="/admin/messages" data-auth-path="/admin/messages">Ver todos los mensajes</a>
             </div>
           <% } else { %>
             <div class="meta">
@@ -156,10 +156,10 @@
             </div>
 
             <div class="toolbar">
-              <a class="button" href="<%= authPath('/admin') %>">Volver al dashboard</a>
-              <a class="button" href="<%= authPath('/admin/messages') %>">Ver todos los mensajes</a>
+              <a class="button" href="/admin" data-auth-path="/admin">Volver al dashboard</a>
+              <a class="button" href="/admin/messages" data-auth-path="/admin/messages">Ver todos los mensajes</a>
               <% if (message.status !== 'processed') { %>
-                <form action="<%= authPath(`/admin/messages/${message.id}/process`) %>" method="post" data-process-message>
+                <form action="/admin/messages/<%= message.id %>/process" method="post" data-auth-path="/admin/messages/<%= message.id %>/process" data-process-message>
                   <button class="primary" type="submit">Marcar como procesado</button>
                 </form>
               <% } %>
@@ -168,5 +168,6 @@
         </div>
       </section>
     </main>
+    <%- include('partials/auth-nav-script') %>
   </body>
 </html>

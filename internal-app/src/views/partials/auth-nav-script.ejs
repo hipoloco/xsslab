@@ -1,0 +1,60 @@
+<script>
+  (() => {
+    const storageKey = <%- JSON.stringify(authStorageKey) %>;
+
+    function currentToken() {
+      return localStorage.getItem(storageKey) || '';
+    }
+
+    function stripTokenFromUrl() {
+      const url = new URL(window.location.href);
+      const token = url.searchParams.get('token');
+
+      if (!token) {
+        return;
+      }
+
+      localStorage.setItem(storageKey, token);
+      url.searchParams.delete('token');
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+
+    function buildAuthPath(pathname) {
+      const token = currentToken();
+      if (!token) {
+        return pathname;
+      }
+
+      const url = new URL(pathname, window.location.origin);
+      url.searchParams.set('token', token);
+      return `${url.pathname}${url.search}${url.hash}`;
+    }
+
+    function handleLinks() {
+      document.querySelectorAll('[data-auth-path]').forEach((element) => {
+        if (element.tagName !== 'A') {
+          return;
+        }
+
+        element.addEventListener('click', (event) => {
+          event.preventDefault();
+          window.location.assign(buildAuthPath(element.dataset.authPath));
+        });
+      });
+    }
+
+    function handleForms() {
+      document.querySelectorAll('form[data-auth-path]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+          event.preventDefault();
+          form.action = buildAuthPath(form.dataset.authPath);
+          form.submit();
+        });
+      });
+    }
+
+    stripTokenFromUrl();
+    handleLinks();
+    handleForms();
+  })();
+</script>
